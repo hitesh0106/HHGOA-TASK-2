@@ -75,7 +75,7 @@ export function VoiceRecorder({
         )}
 
         {/* Mic button — pure HTML, no Framer Motion */}
-        <button
+        <button suppressHydrationWarning
           onClick={handleClick}
           disabled={isWorking}
           aria-label={isListening ? "Stop recording" : "Start recording"}

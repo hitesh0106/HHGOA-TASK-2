@@ -36,7 +36,7 @@ export function Navbar({ active, onNavigate, systemOnline }: NavbarProps) {
         {/* Center: nav */}
         <nav className="hidden md:flex items-center gap-1">
           {navItems.map((item) => (
-            <button
+            <button suppressHydrationWarning
               key={item.id}
               onClick={() => onNavigate(item.id)}
               className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition-colors ${
@@ -67,7 +67,7 @@ export function Navbar({ active, onNavigate, systemOnline }: NavbarProps) {
       {/* Mobile nav */}
       <div className="md:hidden border-t border-forest-200/60 px-4 py-2 flex gap-1">
         {navItems.map((item) => (
-          <button
+          <button suppressHydrationWarning
             key={item.id}
             onClick={() => onNavigate(item.id)}
             className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-full transition-colors ${

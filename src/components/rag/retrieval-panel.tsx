@@ -28,7 +28,7 @@ export function RetrievalPanel({
 
   return (
     <div className="card-paper rounded-xl overflow-hidden">
-      <button
+      <button suppressHydrationWarning
         onClick={() => setExpanded(!expanded)}
         className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-forest-50/40 transition-colors"
       >
@@ -87,7 +87,7 @@ function RetrievedChunk({ chunk, index }: { chunk: RetrievedChunkData; index: nu
 
   return (
     <div className="px-5 py-3 hover:bg-forest-50/30 transition-colors">
-      <button
+      <button suppressHydrationWarning
         onClick={() => setExpanded(!expanded)}
         className="w-full text-left flex items-start gap-3"
       >

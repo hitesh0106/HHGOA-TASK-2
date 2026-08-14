@@ -111,7 +111,7 @@ export function EvaluationDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <button suppressHydrationWarning
             onClick={() => setIncludeFullPipeline(!includeFullPipeline)}
             disabled={running}
             className={cn(
@@ -126,6 +126,7 @@ export function EvaluationDashboard() {
           <Button
             onClick={runBenchmark}
             disabled={running}
+            suppressHydrationWarning
             className="btn-gold rounded-full text-xs h-8"
           >
             {running ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
@@ -374,7 +375,7 @@ function PerQueryTable({ report }: { report: BenchmarkReport }) {
         </table>
       </div>
       {data.perQuery.length > 5 && (
-        <button
+        <button suppressHydrationWarning
           onClick={() => setExpanded(!expanded)}
           className="mt-2 text-[11px] text-forest-600 hover:text-forest-800 font-medium"
         >

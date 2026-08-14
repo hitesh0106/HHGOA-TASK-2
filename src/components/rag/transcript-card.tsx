@@ -48,7 +48,7 @@ export function TranscriptCard({
           <Mic className="w-3 h-3" />
           <span>Sarvam Saaras v3</span>
         </div>
-        <button
+        <button suppressHydrationWarning
           onClick={onRerun}
           disabled={isProcessing}
           className="flex items-center gap-1.5 text-[11px] font-medium text-forest-600 hover:text-forest-800 disabled:opacity-50 transition-colors"

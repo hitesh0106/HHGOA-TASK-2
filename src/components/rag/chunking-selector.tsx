@@ -36,7 +36,7 @@ export function ChunkingSelector({
           const loaded = loadedStrategies.includes(s);
           const isActive = s === strategy;
           return (
-            <button
+            <button suppressHydrationWarning
               key={s}
               onClick={() => loaded && onChange(s)}
               disabled={!loaded}
@@ -94,7 +94,7 @@ export function ChunkingSelector({
           <div className="text-xs font-medium text-forest-800">LLM hallucination judge</div>
           <div className="text-[10px] text-forest-500">Strict grounding · adds ~1.5s</div>
         </div>
-        <button
+        <button suppressHydrationWarning
           onClick={() => onUseLlmJudgeChange(!useLlmJudge)}
           role="switch"
           aria-checked={useLlmJudge}
