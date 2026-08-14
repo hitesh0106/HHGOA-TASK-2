@@ -164,16 +164,29 @@ export default function Home() {
           sampleRate: 16000,
         },
       });
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // Try MIME types in priority order. We prefer plain "audio/webm" (no
+      // codec suffix) because Sarvam does strict string matching and rejects
+      // "audio/webm;codecs=opus". The backend also sanitizes the MIME type,
+      // but recording with a clean MIME from the start avoids edge cases.
+      const mimeCandidates = [
+        "audio/webm",
+        "audio/ogg",
+        "audio/mp4",
+        "audio/webm;codecs=opus",
+      ];
+      const mimeType =
+        mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
       recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: mimeType || "audio/webm",
+        });
         stream.getTracks().forEach((t) => t.stop());
         await transcribeAudio(audioBlob);
       };

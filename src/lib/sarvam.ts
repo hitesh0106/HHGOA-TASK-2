@@ -23,6 +23,96 @@ const SARVAM_STT_MODE = (process.env.SARVAM_STT_MODE ?? "transcribe") as
   | "translit"
   | "codemix";
 
+/**
+ * MIME types Sarvam accepts (from official docs).
+ * Used to sanitize the incoming MIME type — Sarvam does strict string matching
+ * and rejects e.g. "audio/webm;codecs=opus" even though "audio/webm" is allowed.
+ */
+const SARVAM_ACCEPTED_MIME_TYPES = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/mpeg3",
+  "audio/x-mpeg-3",
+  "audio/x-mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/wave",
+  "audio/pcm_s16le",
+  "audio/pcm_l16",
+  "audio/pcm_raw",
+  "audio/raw",
+  "application/octet-stream",
+  "audio/aac",
+  "audio/x-aac",
+  "audio/aiff",
+  "audio/x-aiff",
+  "audio/ogg",
+  "audio/opus",
+  "audio/flac",
+  "audio/x-flac",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/m4a",
+  "audio/amr",
+  "audio/x-ms-wma",
+  "audio/webm",
+  "video/webm",
+]);
+
+/**
+ * Sanitize the incoming MIME type for Sarvam.
+ *
+ * Browsers record audio as e.g. "audio/webm;codecs=opus" — Sarvam rejects this
+ * because it does strict string matching and only "audio/webm" is in the
+ * allow-list. We strip codec parameters and validate against the accepted list.
+ * Falls back to "application/octet-stream" (which Sarvam accepts) if the
+ * sanitized MIME type is not in the allow-list.
+ */
+function sanitizeMimeType(mimeType: string): string {
+  if (!mimeType) return "application/octet-stream";
+  // Strip codec parameters: "audio/webm;codecs=opus" → "audio/webm"
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  if (SARVAM_ACCEPTED_MIME_TYPES.has(base)) return base;
+  // Unknown MIME type — use octet-stream (Sarvam auto-detects codec)
+  return "application/octet-stream";
+}
+
+/**
+ * Pick a sensible file extension for the sanitized MIME type.
+ */
+function extensionForMimeType(mime: string): string {
+  const map: Record<string, string> = {
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/mpeg3": "mp3",
+    "audio/x-mpeg-3": "mp3",
+    "audio/x-mp3": "mp3",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/wave": "wav",
+    "audio/ogg": "ogg",
+    "audio/opus": "opus",
+    "audio/flac": "flac",
+    "audio/x-flac": "flac",
+    "audio/mp4": "mp4",
+    "audio/x-m4a": "m4a",
+    "audio/m4a": "m4a",
+    "audio/aac": "aac",
+    "audio/x-aac": "aac",
+    "audio/aiff": "aiff",
+    "audio/x-aiff": "aiff",
+    "audio/amr": "amr",
+    "audio/x-ms-wma": "wma",
+    "audio/webm": "webm",
+    "video/webm": "webm",
+    "audio/pcm_s16le": "pcm",
+    "audio/pcm_l16": "pcm",
+    "audio/pcm_raw": "pcm",
+    "audio/raw": "pcm",
+  };
+  return map[mime] ?? "bin";
+}
+
 export interface SttRequest {
   /** Raw audio bytes (webm, wav, mp3, etc.) */
   audio: Buffer;
@@ -79,7 +169,10 @@ export async function transcribeAudio(req: SttRequest): Promise<SttResponse> {
   }
 
   const mode = req.mode ?? SARVAM_STT_MODE;
-  const filename = req.filename ?? `audio-${Date.now()}.webm`;
+  // Sanitize MIME type — Sarvam rejects "audio/webm;codecs=opus" but accepts "audio/webm"
+  const sanitizedMime = sanitizeMimeType(req.mimeType);
+  const ext = extensionForMimeType(sanitizedMime);
+  const filename = req.filename ?? `audio-${Date.now()}.${ext}`;
   const timeoutMs = req.timeoutMs ?? 30_000;
   const maxRetries = req.maxRetries ?? 2;
   const controller = new AbortController();
@@ -103,7 +196,7 @@ export async function transcribeAudio(req: SttRequest): Promise<SttResponse> {
 
   parts.push(
     Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${req.mimeType}\r\n\r\n`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${sanitizedMime}\r\n\r\n`,
       "utf8"
     )
   );

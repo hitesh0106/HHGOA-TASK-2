@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const result = await transcribeAudio({
       audio,
       mimeType: audioFile.type || "audio/webm",
-      filename: audioFile.name || `audio-${Date.now()}.webm`,
+      filename: audioFile.name || undefined,
       mode: mode as any,
       languageCode: languageCode || undefined,
       timeoutMs: 30_000,
