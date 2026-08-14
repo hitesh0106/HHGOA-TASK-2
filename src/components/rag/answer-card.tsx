@@ -84,18 +84,28 @@ export function AnswerCard({
       ) : state === "blocked" ? (
         <div className="space-y-3">
           <p className="font-serif text-lg text-forest-900 leading-snug">
-            {answer}
+            {answer || "I don't have enough information in the retrieved context to answer this question confidently."}
           </p>
           {warnings.length > 0 && (
-            <ul className="space-y-1">
-              {warnings.map((w, i) => (
-                <li key={i} className="text-xs text-rose-700 flex items-start gap-1.5">
-                  <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                  <span>{w}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="rounded-md bg-rose-50/60 border border-rose-200 p-3">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-rose-700 mb-1.5">
+                Why was this blocked?
+              </div>
+              <ul className="space-y-1">
+                {warnings.map((w, i) => (
+                  <li key={i} className="text-xs text-rose-700 flex items-start gap-1.5">
+                    <span className="text-rose-400 mt-0.5">•</span>
+                    <span>{w}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
+          <p className="text-[11px] text-forest-500 italic">
+            This is a feature, not a bug — the system correctly refused to answer
+            rather than risk hallucinating. Try rephrasing your question or speaking
+            in English (the corpus language).
+          </p>
         </div>
       ) : state === "insufficient" ? (
         <div className="space-y-3">

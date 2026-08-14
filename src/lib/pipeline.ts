@@ -304,6 +304,9 @@ function buildBlockedResponse(args: {
     },
     blocked: true,
     blockReasons: args.blockReasons,
-    ok: false,
+    // A blocked pipeline is NOT an error — it's a successful refusal.
+    // The system correctly decided not to answer. ok=true means "the pipeline
+    // ran successfully and returned a decision", not "an answer was produced".
+    ok: true,
   };
 }

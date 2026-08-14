@@ -117,6 +117,7 @@ export default function Home() {
   const [strategy, setStrategy] = useState<ChunkingStrategy>("overlapping");
   const [topK, setTopK] = useState(5);
   const [useLlmJudge, setUseLlmJudge] = useState(false);
+  const [sttMode, setSttMode] = useState<"transcribe" | "translate">("transcribe");
 
   // Pipeline result
   const [result, setResult] = useState<PipelineResponse | null>(null);
@@ -200,7 +201,7 @@ export default function Home() {
           : "Microphone access failed. Check browser permissions."
       );
     }
-  }, [strategy, topK, useLlmJudge]);
+  }, [strategy, topK, useLlmJudge, sttMode]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && recorderState === "listening") {
@@ -215,7 +216,7 @@ export default function Home() {
       try {
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.webm");
-        formData.append("mode", "transcribe");
+        formData.append("mode", sttMode);
         const res = await fetch("/api/stt", { method: "POST", body: formData });
         const data: SttResponse = await res.json();
         if (!data.ok) {
@@ -236,7 +237,7 @@ export default function Home() {
         setRecorderState("idle");
       }
     },
-    [strategy, topK, useLlmJudge]
+    [strategy, topK, useLlmJudge, sttMode]
   );
 
   // -------------------------------------------------------------------------
@@ -262,7 +263,9 @@ export default function Home() {
         });
         const data: PipelineResponse & { error?: string } = await res.json();
         if (!data.ok) {
-          setPipelineError(data.error ?? "Pipeline failed");
+          // Distinguish between real errors and HTTP-level issues
+          const errMsg = data.error || `Pipeline request failed (HTTP ${res.status})`;
+          setPipelineError(errMsg);
         } else {
           setResult(data);
         }
@@ -272,7 +275,7 @@ export default function Home() {
         setRecorderState("ready");
       }
     },
-    [strategy, topK, useLlmJudge]
+    [strategy, topK, useLlmJudge, sttMode]
   );
 
   // -------------------------------------------------------------------------
@@ -378,6 +381,8 @@ export default function Home() {
             useLlmJudge={useLlmJudge}
             setUseLlmJudge={setUseLlmJudge}
             loadedStrategies={loadedStrategies}
+            sttMode={sttMode}
+            setSttMode={setSttMode}
             stages={stages}
             stageLatencies={stageLatencies}
             answerState={answerState}
@@ -457,6 +462,8 @@ interface VoiceRagTabProps {
   useLlmJudge: boolean;
   setUseLlmJudge: (b: boolean) => void;
   loadedStrategies: string[];
+  sttMode: "transcribe" | "translate";
+  setSttMode: (m: "transcribe" | "translate") => void;
   stages: Record<PipelineStageId, PipelineStageStatus>;
   stageLatencies: Partial<Record<PipelineStageId, number>>;
   answerState: AnswerState;
@@ -485,6 +492,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
     useLlmJudge,
     setUseLlmJudge,
     loadedStrategies,
+    sttMode,
+    setSttMode,
     stages,
     stageLatencies,
     answerState,
@@ -524,6 +533,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
             useLlmJudge={useLlmJudge}
             onUseLlmJudgeChange={setUseLlmJudge}
             loadedStrategies={loadedStrategies}
+            sttMode={sttMode}
+            onSttModeChange={setSttMode}
           />
 
           {transcript && (

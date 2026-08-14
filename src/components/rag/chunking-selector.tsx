@@ -1,6 +1,9 @@
 "use client";
 
+import { Languages } from "lucide-react";
 import { CHUNKING_STRATEGIES, CHUNKING_DESCRIPTIONS, type ChunkingStrategy } from "@/lib/chunking";
+
+export type SttMode = "transcribe" | "translate";
 
 interface ChunkingSelectorProps {
   strategy: ChunkingStrategy;
@@ -10,6 +13,8 @@ interface ChunkingSelectorProps {
   useLlmJudge: boolean;
   onUseLlmJudgeChange: (b: boolean) => void;
   loadedStrategies: string[];
+  sttMode: SttMode;
+  onSttModeChange: (m: SttMode) => void;
 }
 
 export function ChunkingSelector({
@@ -20,6 +25,8 @@ export function ChunkingSelector({
   useLlmJudge,
   onUseLlmJudgeChange,
   loadedStrategies,
+  sttMode,
+  onSttModeChange,
 }: ChunkingSelectorProps) {
   const meta = CHUNKING_DESCRIPTIONS[strategy];
 
@@ -28,6 +35,39 @@ export function ChunkingSelector({
       <div className="flex items-center justify-between mb-4">
         <span className="eyebrow">Chunking Strategy</span>
         <span className="chip chip-gold capitalize">{strategy}</span>
+      </div>
+
+      {/* STT mode toggle — translate Indic speech to English for retrieval */}
+      <div className="mb-4 rounded-lg border border-forest-200/70 bg-forest-50/40 p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <Languages className="w-3.5 h-3.5 text-forest-600" />
+            <span className="text-xs font-medium text-forest-800">Speech mode</span>
+          </div>
+          <div className="flex items-center gap-1 bg-forest-100 rounded-full p-0.5">
+            <button suppressHydrationWarning
+              onClick={() => onSttModeChange("transcribe")}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-colors ${
+                sttMode === "transcribe" ? "bg-white text-forest-800 shadow-sm" : "text-forest-600"
+              }`}
+            >
+              Transcribe
+            </button>
+            <button suppressHydrationWarning
+              onClick={() => onSttModeChange("translate")}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-colors ${
+                sttMode === "translate" ? "bg-white text-forest-800 shadow-sm" : "text-forest-600"
+              }`}
+            >
+              Translate → EN
+            </button>
+          </div>
+        </div>
+        <p className="text-[10px] text-forest-500 leading-snug">
+          {sttMode === "transcribe"
+            ? "Keeps speech in its original language. Best for English queries."
+            : "Translates Indic speech to English before retrieval. Use this for Hindi/Marathi/Tamil/etc. — the corpus is English."}
+        </p>
       </div>
 
       {/* Strategy grid */}
