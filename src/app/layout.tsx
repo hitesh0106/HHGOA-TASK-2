@@ -1,37 +1,54 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Fraunces, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const sans = Inter({
+  variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const serif = Fraunces({
+  variable: "--font-serif",
   subsets: ["latin"],
+  display: "swap",
+  axes: ["opsz", "SOFT"],
+});
+
+const mono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "Voice RAG · HH Goa 2026 · AI Lab",
+  description:
+    "Voice-enabled retrieval-augmented generation, grounded in real knowledge. Hacker House Goa 2026 Task 2 — AI Lab.",
+  keywords: [
+    "HH Goa 2026",
+    "Hacker House Goa",
+    "Voice RAG",
+    "MSMARCO-XI",
+    "Sarvam",
+    "AI4Bharat",
+    "Retrieval Augmented Generation",
+  ],
+  authors: [{ name: "HH Goa 2026" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
+    title: "Voice RAG · HH Goa 2026 · AI Lab",
+    description:
+      "Voice-enabled retrieval-augmented generation, grounded in real knowledge.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
+    title: "Voice RAG · HH Goa 2026",
+    description: "Voice-enabled retrieval-augmented generation.",
   },
 };
 
@@ -43,7 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${sans.variable} ${serif.variable} ${mono.variable} antialiased bg-background text-foreground`}
       >
         {children}
         <Toaster />
