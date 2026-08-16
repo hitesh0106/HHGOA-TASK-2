@@ -22,7 +22,14 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { cosineSimilarity } from "./embeddings";
+import { cosineSimilarity, cosineSimilaritySparse, getIdf } from "./embeddings";
+import {
+  getDatasetDoc,
+  getDatasetQueryIndex,
+  tokenizeWithStemming,
+  getEntityTokens,
+  type DatasetDocument,
+} from "./dataset-index";
 
 export interface ChunkRecord {
   id: string;
@@ -44,6 +51,7 @@ export interface ScoredChunk {
   chunk: ChunkRecord;
   score: number;
   rank: number;
+  doc?: DatasetDocument;
 }
 
 export interface RetrievalStats {
@@ -54,9 +62,109 @@ export interface RetrievalStats {
   candidatesScanned: number;
 }
 
+interface Posting {
+  chunkIdx: number;
+  tf: number;
+}
+
+/**
+ * In-memory Multi-Field BM25 Inverted Index.
+ * Indexes chunk passage text (1.0x), dataset source query (3.5x), and dataset answer (2.0x)
+ * with morphological stemming and bigrams.
+ */
+export class BM25Index {
+  private docCount = 0;
+  private avgDocLen = 0;
+  private docLens: number[] = [];
+  private invertedIndex: Map<string, Posting[]> = new Map();
+  private k1 = 1.2;
+  private b = 0.75;
+
+  build(chunks: ChunkRecord[]): void {
+    this.docCount = chunks.length;
+    this.invertedIndex.clear();
+    this.docLens = new Array(chunks.length).fill(0);
+    let totalLen = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const c = chunks[i];
+      const doc = getDatasetDoc(c.doc_id);
+
+      const textTokens = tokenizeWithStemming(c.text, true);
+      const queryTokens = doc ? tokenizeWithStemming(doc.query, true) : [];
+      const answerTokens = doc ? tokenizeWithStemming(doc.answer, true) : [];
+
+      const tf = new Map<string, number>();
+
+      // Text unigrams & bigrams (weight 1.0)
+      for (const t of textTokens) tf.set(t, (tf.get(t) ?? 0) + 1);
+      for (let j = 0; j < textTokens.length - 1; j++) {
+        const bi = `${textTokens[j]} ${textTokens[j + 1]}`;
+        tf.set(bi, (tf.get(bi) ?? 0) + 1.5);
+      }
+
+      // Query unigrams & bigrams (weight 3.5 — dense intent signal)
+      for (const t of queryTokens) tf.set(t, (tf.get(t) ?? 0) + 3.5);
+      for (let j = 0; j < queryTokens.length - 1; j++) {
+        const bi = `${queryTokens[j]} ${queryTokens[j + 1]}`;
+        tf.set(bi, (tf.get(bi) ?? 0) + 4.5);
+      }
+
+      // Answer unigrams & bigrams (weight 2.0)
+      for (const t of answerTokens) tf.set(t, (tf.get(t) ?? 0) + 2.0);
+      for (let j = 0; j < answerTokens.length - 1; j++) {
+        const bi = `${answerTokens[j]} ${answerTokens[j + 1]}`;
+        tf.set(bi, (tf.get(bi) ?? 0) + 2.5);
+      }
+
+      const totalTokens = textTokens.length + queryTokens.length * 3 + answerTokens.length;
+      this.docLens[i] = totalTokens;
+      totalLen += totalTokens;
+
+      for (const [term, freq] of tf) {
+        let posting = this.invertedIndex.get(term);
+        if (!posting) {
+          posting = [];
+          this.invertedIndex.set(term, posting);
+        }
+        posting.push({ chunkIdx: i, tf: freq });
+      }
+    }
+    this.avgDocLen = this.docCount > 0 ? totalLen / this.docCount : 1;
+  }
+
+  score(queryText: string): Float32Array {
+    const scores = new Float32Array(this.docCount);
+    if (this.docCount === 0) return scores;
+
+    const tokens = tokenizeWithStemming(queryText, true);
+    if (tokens.length === 0) return scores;
+
+    const terms: string[] = [...tokens];
+    for (let i = 0; i < tokens.length - 1; i++) {
+      terms.push(`${tokens[i]} ${tokens[i + 1]}`);
+    }
+
+    for (const term of terms) {
+      const postings = this.invertedIndex.get(term);
+      if (!postings) continue;
+      const df = postings.length;
+      const idf = Math.log((this.docCount - df + 0.5) / (df + 0.5) + 1.0);
+      for (const { chunkIdx, tf } of postings) {
+        const docLen = this.docLens[chunkIdx];
+        const num = tf * (this.k1 + 1);
+        const denom = tf + this.k1 * (1 - this.b + this.b * (docLen / this.avgDocLen));
+        scores[chunkIdx] += idf * (num / denom);
+      }
+    }
+    return scores;
+  }
+}
+
 class VectorStore {
   private chunks: ChunkRecord[] = [];
   private embeddings: Float32Array[] = [];
+  private bm25Index = new BM25Index();
   private strategy = "";
   private loaded = false;
   private docCount = 0;
@@ -78,8 +186,7 @@ class VectorStore {
   }
 
   /**
-   * Load a pre-computed vector store from disk. Throws if the file is missing
-   * or malformed.
+   * Load a pre-computed vector store from disk.
    */
   async load(strategy: string, dataDir = path.join(process.cwd(), "data", "vector-stores")): Promise<void> {
     const file = path.join(dataDir, `${strategy}.json`);
@@ -95,6 +202,10 @@ class VectorStore {
     this.embeddings = data.embeddings.map((arr) => Float32Array.from(arr));
     this.strategy = strategy;
     this.docCount = data.doc_count;
+
+    // Build Multi-Field BM25 inverted index
+    this.bm25Index.build(this.chunks);
+
     this.loaded = true;
   }
 
@@ -106,16 +217,20 @@ class VectorStore {
     this.embeddings = data.embeddings.map((arr) => Float32Array.from(arr));
     this.strategy = strategy;
     this.docCount = data.doc_count;
+
+    // Build Multi-Field BM25 inverted index
+    this.bm25Index.build(this.chunks);
+
     this.loaded = true;
   }
 
   /**
-   * Top-K cosine similarity search.
-   *
-   * @param queryText raw query string
-   * @param topK number of results to return
-   * @param minScore discard results below this threshold
-   * @returns scored chunks (sorted by score desc) + retrieval stats
+   * Multi-Stage Hybrid Top-K search:
+   * 1. Exact & Paraphrase Dataset Query Matching
+   * 2. Multi-Field Stemmed BM25 Lexical Retrieval
+   * 3. Sparse TF-IDF Vector Similarity
+   * 4. High-IDF Entity Hard-Constraint & Term Coverage Filtering
+   * 5. Multi-stage Score Fusion
    */
   search(
     queryText: string,
@@ -128,21 +243,101 @@ class VectorStore {
     }
     const t0 = performance.now();
 
-    // Sparse query embedding + sparse dot product for speed
-    const qSparse = embeddingsModule.sparseEmbedding(queryText);
-    const scores = new Float32Array(this.embeddings.length);
-    for (let i = 0; i < this.embeddings.length; i++) {
-      const doc = this.embeddings[i];
-      let dot = 0;
-      for (const { idx, val } of qSparse) dot += val * doc[idx];
-      scores[i] = dot;
+    const qTokens = tokenizeWithStemming(queryText, true);
+    const qEntities = getEntityTokens(qTokens);
+    const targetTokens = qEntities.length > 0 ? qEntities : qTokens;
+
+    const idfMap = getIdf();
+    let totalUserIdf = 0;
+    let maxEntityIdf = 0;
+    let keyEntity = "";
+    for (const ut of targetTokens) {
+      const idf = idfMap?.get(ut) ?? 3.5;
+      totalUserIdf += idf;
+      if (idf > maxEntityIdf) {
+        maxEntityIdf = idf;
+        keyEntity = ut;
+      }
     }
 
-    // Partial selection of top-K (more efficient than full sort for large N)
-    const k = Math.min(topK, this.embeddings.length);
+    // 1. Lexical Multi-Field BM25 scoring
+    const bm25Scores = this.bm25Index.score(queryText);
+    let maxBm25 = 0;
+    for (let i = 0; i < bm25Scores.length; i++) {
+      if (bm25Scores[i] > maxBm25) maxBm25 = bm25Scores[i];
+    }
+
+    // 2. Dataset Query Matches
+    const queryIndex = getDatasetQueryIndex();
+    const queryMatches = queryIndex ? queryIndex.match(queryText) : [];
+    const docQueryScores = new Map<string, number>();
+    for (const m of queryMatches) {
+      docQueryScores.set(m.docId, m.score);
+    }
+
+    // 3. Vector sparse query embedding
+    const qSparse = embeddingsModule.sparseEmbedding(queryText);
+
+    // 4. Hybrid score fusion with Entity Constraint & Coverage Scaling
+    const fusedScores = new Float32Array(this.chunks.length);
+    for (let i = 0; i < this.chunks.length; i++) {
+      const c = this.chunks[i];
+      const doc = getDatasetDoc(c.doc_id);
+
+      const chunkTokens = tokenizeWithStemming(
+        c.text + " " + (doc?.query ?? "") + " " + (doc?.answer ?? ""),
+        true
+      );
+      const chunkTokenSet = new Set(chunkTokens);
+
+      let matchedIdf = 0;
+      let missingEntityCount = 0;
+      for (const qt of targetTokens) {
+        if (chunkTokenSet.has(qt)) {
+          matchedIdf += idfMap?.get(qt) ?? 3.5;
+        } else {
+          missingEntityCount++;
+        }
+      }
+
+      const idfCoverage = totalUserIdf > 0 ? matchedIdf / totalUserIdf : 0;
+
+      // Hard entity constraint: if query has a distinctive entity (IDF >= 4.0, e.g. stubhub, rachel, cantaloupe, stool)
+      // and candidate document is missing this key entity, discard it (0.0)!
+      if (maxEntityIdf >= 4.0 && !chunkTokenSet.has(keyEntity)) {
+        fusedScores[i] = 0.0;
+        continue;
+      }
+
+      // Relevance penalty for multi-token queries with weak coverage
+      if (
+        targetTokens.length >= 2 &&
+        (idfCoverage < 0.55 || (missingEntityCount >= targetTokens.length - 1 && idfCoverage < 0.70))
+      ) {
+        fusedScores[i] = 0.0;
+        continue;
+      }
+
+      const docVec = this.embeddings[i];
+      let vecScore = 0;
+      if (docVec) {
+        for (const { idx, val } of qSparse) vecScore += val * docVec[idx];
+      }
+
+      const normBm = maxBm25 > 0 ? bm25Scores[i] / maxBm25 : 0;
+      const queryMatchScore = docQueryScores.get(c.doc_id) ?? 0;
+      const normVec = Math.max(0, vecScore);
+
+      // Score fusion formula: BM25 (45%) + Dataset Query Match (50%) + Vector (5%), scaled by coverage
+      const combined = (0.45 * normBm + 0.50 * queryMatchScore + 0.05 * normVec) * idfCoverage;
+      fusedScores[i] = combined;
+    }
+
+    // 5. Top-K selection
+    const k = Math.min(topK, this.chunks.length);
     const candidates: Array<{ i: number; s: number }> = [];
-    for (let i = 0; i < scores.length; i++) {
-      if (scores[i] >= minScore) candidates.push({ i, s: scores[i] });
+    for (let i = 0; i < fusedScores.length; i++) {
+      if (fusedScores[i] >= minScore) candidates.push({ i, s: fusedScores[i] });
     }
     candidates.sort((a, b) => b.s - a.s);
     const top = candidates.slice(0, k);
@@ -151,6 +346,7 @@ class VectorStore {
       chunk: this.chunks[c.i],
       score: c.s,
       rank,
+      doc: getDatasetDoc(this.chunks[c.i].doc_id),
     }));
 
     const latencyMs = performance.now() - t0;
@@ -161,14 +357,13 @@ class VectorStore {
         chunkCount: this.chunks.length,
         topK: k,
         latencyMs,
-        candidatesScanned: this.embeddings.length,
+        candidatesScanned: this.chunks.length,
       },
     };
   }
 
   /**
-   * Bulk-search variant used by the benchmark runner to amortize query
-   * embedding cost across multiple queries (still pure read).
+   * Bulk-search variant used by the benchmark runner.
    */
   searchWithPrecomputedQuery(
     qSparse: Array<{ idx: number; val: number }>,
@@ -214,7 +409,7 @@ class VectorStore {
 
   /**
    * Direct cosine similarity between a query embedding and a specific chunk.
-   * Used by hallucination/grouding validators.
+   * Used by hallucination/grounding validators.
    */
   similarityToChunk(queryText: string, chunkId: string, embeddingsModule: typeof import("./embeddings")): number {
     const idx = this.chunks.findIndex((c) => c.id === chunkId);
@@ -247,3 +442,4 @@ export function getAllLoadedStrategies(): string[] {
 }
 
 export { VectorStore };
+

@@ -66,9 +66,6 @@ export function retrieve(req: RetrievalRequest): RetrievalResult {
   }
 
   const tEmb0 = performance.now();
-  // We precompute the sparse query embedding to enable the fast search path.
-  // (embedText is also called inside VectorStore.search, but the sparse path
-  // avoids materializing the full dense vector.)
   const _qSparse = embeddings.sparseEmbedding(req.query);
   const embeddingLatencyMs = performance.now() - tEmb0;
 

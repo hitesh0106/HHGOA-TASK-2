@@ -51,11 +51,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const engine = body.engine === "sarvam" ? "sarvam" : "fast";
+
     const report = await generateBenchmarkReport({
       queries: Array.isArray(body.queries) ? body.queries : undefined,
       strategies,
-      includeFullPipeline: body.includeFullPipeline === true,
-      fullPipelineQueryCount: body.fullPipelineQueryCount ?? 5,
+      includeFullPipeline: body.includeFullPipeline !== false,
+      fullPipelineQueryCount: body.fullPipelineQueryCount ?? undefined,
+      engine,
     });
 
     return NextResponse.json({

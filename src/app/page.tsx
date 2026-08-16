@@ -118,6 +118,7 @@ export default function Home() {
   const [topK, setTopK] = useState(5);
   const [useLlmJudge, setUseLlmJudge] = useState(false);
   const [sttMode, setSttMode] = useState<"transcribe" | "translate">("transcribe");
+  const [engine, setEngine] = useState<RagEngine>("fast");
 
   // Pipeline result
   const [result, setResult] = useState<PipelineResponse | null>(null);
@@ -201,7 +202,7 @@ export default function Home() {
           : "Microphone access failed. Check browser permissions."
       );
     }
-  }, [strategy, topK, useLlmJudge, sttMode]);
+  }, [strategy, topK, useLlmJudge, sttMode, engine]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && recorderState === "listening") {
@@ -237,7 +238,7 @@ export default function Home() {
         setRecorderState("idle");
       }
     },
-    [strategy, topK, useLlmJudge, sttMode]
+    [strategy, topK, useLlmJudge, sttMode, engine]
   );
 
   // -------------------------------------------------------------------------
@@ -255,6 +256,7 @@ export default function Home() {
           body: JSON.stringify({
             query,
             strategy,
+            engine,
             topK,
             useLlmJudge,
             minScore: 0.05,
@@ -262,7 +264,7 @@ export default function Home() {
           }),
         });
         const data: PipelineResponse & { error?: string } = await res.json();
-        if (!data.ok) {
+        if (!data.ok && !data.blocked) {
           // Distinguish between real errors and HTTP-level issues
           const errMsg = data.error || `Pipeline request failed (HTTP ${res.status})`;
           setPipelineError(errMsg);
@@ -275,7 +277,7 @@ export default function Home() {
         setRecorderState("ready");
       }
     },
-    [strategy, topK, useLlmJudge, sttMode]
+    [strategy, topK, useLlmJudge, sttMode, engine]
   );
 
   // -------------------------------------------------------------------------
@@ -383,6 +385,8 @@ export default function Home() {
             loadedStrategies={loadedStrategies}
             sttMode={sttMode}
             setSttMode={setSttMode}
+            engine={engine}
+            setEngine={setEngine}
             stages={stages}
             stageLatencies={stageLatencies}
             answerState={answerState}
@@ -435,7 +439,7 @@ export default function Home() {
             HH Goa 2026 · Voice RAG · AI Lab
           </div>
           <div className="tabular">
-            Sarvam Saaras v3 · GLM-4.5 · MSMARCO-XI
+            Sarvam Saaras v3 · Sarvam-105B · MSMARCO-XI
           </div>
         </div>
       </footer>
@@ -464,6 +468,8 @@ interface VoiceRagTabProps {
   loadedStrategies: string[];
   sttMode: "transcribe" | "translate";
   setSttMode: (m: "transcribe" | "translate") => void;
+  engine: RagEngine;
+  setEngine: (e: RagEngine) => void;
   stages: Record<PipelineStageId, PipelineStageStatus>;
   stageLatencies: Partial<Record<PipelineStageId, number>>;
   answerState: AnswerState;
@@ -494,6 +500,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
     loadedStrategies,
     sttMode,
     setSttMode,
+    engine,
+    setEngine,
     stages,
     stageLatencies,
     answerState,
@@ -535,6 +543,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
             loadedStrategies={loadedStrategies}
             sttMode={sttMode}
             onSttModeChange={setSttMode}
+            engine={engine}
+            onEngineChange={setEngine}
           />
 
           {transcript && (

@@ -1,24 +1,15 @@
 /**
- * LLM Client (z-ai-web-dev-sdk)
- * =============================
+ * LLM Client (Sarvam AI / Multi-Provider Abstraction)
+ * ====================================================
  *
- * Thin wrapper around the in-house ZAI SDK chat completions API. Used for
- * grounded answer generation, hallucination detection, and answer validation.
+ * Server-side REST client for Sarvam AI Chat Completions (`sarvam-30b`)
+ * and OpenAI-compatible endpoints. Used for grounded answer generation,
+ * hallucination detection, and refusal validation.
  *
- * Why z-ai-web-dev-sdk?
- * ---------------------
- * The Hacker House Goa task gives us a Sarvam API key but Sarvam does not
- * currently expose a general-purpose chat LLM endpoint suitable for grounded
- * answer generation. The in-house ZAI SDK provides GLM-4.5 (a strong
- * multilingual LLM) free of charge in this sandbox, with no extra API key
- * required.
- *
- * For production deployment, this module is the single integration point —
- * swap implementations to Sarvam's LLM, OpenAI, Anthropic, etc. without
- * touching the rest of the pipeline.
+ * Provider: Sarvam AI (`sarvam-30b`)
+ * Endpoint: POST https://api.sarvam.ai/v1/chat/completions
+ * Header: api-subscription-key: ${SARVAM_API_KEY}
  */
-
-import ZAI from "z-ai-web-dev-sdk";
 
 export interface LlmMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -55,22 +46,37 @@ export class LlmError extends Error {
   }
 }
 
-let cachedClient: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-async function getClient(): Promise<Awaited<ReturnType<typeof ZAI.create>>> {
-  if (cachedClient) return cachedClient;
-  cachedClient = await ZAI.create();
-  return cachedClient;
-}
-
 /**
- * Generate a chat completion with retries, timeout, and structured response.
+ * Generate a chat completion via Sarvam AI REST API with retries, timeout,
+ * and structured response parsing.
  *
  * Throws LlmError on permanent failure.
  */
 export async function generateChat(req: LlmRequest): Promise<LlmResponse> {
-  const maxRetries = req.maxRetries ?? 2;
-  const timeoutMs = req.timeoutMs ?? 15_000;
+  const apiKey = process.env.SARVAM_API_KEY;
+  if (!apiKey || apiKey.includes("your_sarvam_api_key")) {
+    throw new LlmError(
+      "SARVAM_API_KEY is missing or unconfigured in .env",
+      false,
+      null
+    );
+  }
+
+  const endpoint =
+    process.env.SARVAM_LLM_ENDPOINT || "https://api.sarvam.ai/v1/chat/completions";
+  const model = process.env.LLM_MODEL || "sarvam-105b-conversations";
+  const maxRetries = req.maxRetries ?? Number(process.env.LLM_MAX_RETRIES ?? 2);
+  const timeoutMs = req.timeoutMs ?? Number(process.env.LLM_TIMEOUT_MS ?? 15_000);
+
+  const payload = {
+    model,
+    messages: req.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+    temperature: req.temperature ?? 0.2,
+    max_tokens: req.maxTokens ?? 512,
+  };
 
   let attempts = 0;
   let lastError: unknown = null;
@@ -79,29 +85,45 @@ export async function generateChat(req: LlmRequest): Promise<LlmResponse> {
   while (attempts <= maxRetries) {
     attempts++;
     try {
-      const client = await getClient();
-      // Race the completion against a timeout
-      const completion = await Promise.race([
-        client.chat.completions.create({
-          messages: req.messages as any,
-          temperature: req.temperature ?? 0.2,
-          max_tokens: req.maxTokens ?? 1024,
-          thinking: { type: req.thinking === "enabled" ? "enabled" : "disabled" },
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new LlmError(`LLM timed out after ${timeoutMs}ms`, true, null)), timeoutMs)
-        ),
-      ]);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-      const content = completion?.choices?.[0]?.message?.content ?? "";
-      const finishReason = completion?.choices?.[0]?.finish_reason ?? null;
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "api-subscription-key": apiKey,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      if (!resp.ok) {
+        const errorText = await resp.text().catch(() => "");
+        const isRetryable = resp.status >= 500 || resp.status === 429;
+        throw new LlmError(
+          `Sarvam LLM HTTP ${resp.status}: ${errorText || resp.statusText}`,
+          isRetryable,
+          { status: resp.status, body: errorText }
+        );
+      }
+
+      const json = await resp.json();
+      const msgObj = json?.choices?.[0]?.message;
+      const content = (typeof msgObj?.content === "string" && msgObj.content.trim())
+        ? msgObj.content
+        : (typeof msgObj?.reasoning_content === "string" ? msgObj.reasoning_content : "");
+      const finishReason = json?.choices?.[0]?.finish_reason ?? null;
+
       return {
         content,
         finishReason,
         latencyMs: performance.now() - t0,
         attempts,
-        model: completion?.model ?? "glm-4.5",
-        raw: completion,
+        model: json?.model ?? model,
+        raw: json,
       };
     } catch (e) {
       lastError = e;
@@ -113,7 +135,7 @@ export async function generateChat(req: LlmRequest): Promise<LlmResponse> {
 
   if (lastError instanceof LlmError) throw lastError;
   const msg = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new LlmError(`LLM failed after ${attempts} attempts: ${msg}`, false, null);
+  throw new LlmError(`Sarvam LLM failed after ${attempts} attempts: ${msg}`, false, null);
 }
 
 function sleep(ms: number): Promise<void> {

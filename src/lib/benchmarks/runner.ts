@@ -155,12 +155,13 @@ export function benchmarkRetrieval(
 }
 
 // ---------------------------------------------------------------------------
-// Full-pipeline benchmark (slower; calls the LLM)
+// Full-pipeline benchmark
 // ---------------------------------------------------------------------------
 export async function benchmarkFullPipeline(
-  queries: string[] = DEFAULT_BENCHMARK_QUERIES.slice(0, 10),
-  strategies: ChunkingStrategy[] = ["overlapping"],
-  topK = 5
+  queries: string[] = DEFAULT_BENCHMARK_QUERIES,
+  strategies: ChunkingStrategy[] = CHUNKING_STRATEGIES,
+  topK = 5,
+  engine: "fast" | "sarvam" = "fast"
 ): Promise<FullPipelineResult[]> {
   const out: FullPipelineResult[] = [];
   for (const strategy of strategies) {
@@ -169,11 +170,13 @@ export async function benchmarkFullPipeline(
       throw new Error(`vector store "${strategy}" not loaded`);
     }
     const perQuery: FullPipelineResult["perQuery"] = [];
+    const inputGuardrailMsList: number[] = [];
+    const outputGuardrailMsList: number[] = [];
     let blockedCount = 0;
     let refusedCount = 0;
     let groundedCount = 0;
     for (const query of queries) {
-      const res = await runPipeline({ query, strategy, topK, useLlmJudge: false });
+      const res = await runPipeline({ query, strategy, topK, engine, useLlmJudge: false });
       perQuery.push({
         query,
         totalMs: res.timings.totalMs,
@@ -183,6 +186,8 @@ export async function benchmarkFullPipeline(
         confidence: res.confidence,
         grounded: res.grounded,
       });
+      inputGuardrailMsList.push(res.timings.inputGuardrailsMs);
+      outputGuardrailMsList.push(res.timings.outputGuardrailsMs);
       if (res.blocked) blockedCount++;
       if (res.confidence === "refused") refusedCount++;
       if (res.grounded) groundedCount++;
@@ -192,8 +197,8 @@ export async function benchmarkFullPipeline(
       totalStats: computeStats(perQuery.map((q) => q.totalMs)),
       retrievalStats: computeStats(perQuery.map((q) => q.retrievalMs)),
       generationStats: computeStats(perQuery.map((q) => q.generationMs)),
-      inputGuardrailStats: computeStats(perQuery.map(() => 0)), // not tracked per query here
-      outputGuardrailStats: computeStats(perQuery.map(() => 0)),
+      inputGuardrailStats: computeStats(inputGuardrailMsList),
+      outputGuardrailStats: computeStats(outputGuardrailMsList),
       blockedCount,
       refusedCount,
       groundedCount,
@@ -204,16 +209,18 @@ export async function benchmarkFullPipeline(
 }
 
 // ---------------------------------------------------------------------------
-// Generate a full report (retrieval-only by default; full pipeline opt-in)
+// Generate a full report (retrieval-only + fast full-pipeline)
 // ---------------------------------------------------------------------------
 export async function generateBenchmarkReport(opts: {
   queries?: string[];
   strategies?: ChunkingStrategy[];
   includeFullPipeline?: boolean;
   fullPipelineQueryCount?: number;
+  engine?: "fast" | "sarvam";
 } = {}): Promise<BenchmarkReport> {
   const queries = opts.queries ?? DEFAULT_BENCHMARK_QUERIES;
   const strategies = opts.strategies ?? CHUNKING_STRATEGIES;
+  const engine = opts.engine ?? "fast";
   const notes: string[] = [];
 
   const retrievalOnly = benchmarkRetrieval(queries, strategies);
@@ -224,11 +231,11 @@ export async function generateBenchmarkReport(opts: {
   );
 
   let fullPipeline: FullPipelineResult[] | undefined;
-  if (opts.includeFullPipeline) {
-    const fpQueries = queries.slice(0, opts.fullPipelineQueryCount ?? 5);
-    fullPipeline = await benchmarkFullPipeline(fpQueries, ["overlapping"]);
+  if (opts.includeFullPipeline !== false) {
+    const fpQueries = queries.slice(0, opts.fullPipelineQueryCount ?? queries.length);
+    fullPipeline = await benchmarkFullPipeline(fpQueries, strategies, 5, engine);
     notes.push(
-      `Full-pipeline benchmark ran ${fpQueries.length} queries × 1 strategy (overlapping). LLM calls dominate latency.`
+      `Full-pipeline benchmark ran ${fpQueries.length} queries × ${strategies.length} strategies using "${engine}" engine.`
     );
   }
 

@@ -43,8 +43,7 @@ from typing import Dict, List, Tuple
 # Configuration
 # ---------------------------------------------------------------------------
 DATASET_ID = "ai4bharat/MSMARCO-XI"
-DEFAULT_LANGS = ["en"]  # MSMARCO-XI is multilingual; we default to English
-# subset for the demo. The script accepts --langs hi-IN,ta-IN etc. as well.
+DEFAULT_LANGS = ["default"]  # MSMARCO-XI config is "default"
 
 # ---------------------------------------------------------------------------
 # Stopwords (small English list - keeps the vectorizer lightweight & pure)
@@ -279,11 +278,23 @@ def split_sentences(text: str) -> List[str]:
 # ---------------------------------------------------------------------------
 # Dataset loading
 # ---------------------------------------------------------------------------
-def load_dataset(n: int, langs: List[str]) -> List[Dict]:
+def load_dataset(n: int, langs: List[str], local_path: Path | None = None) -> List[Dict]:
     """
-    Load `n` documents from MSMARCO-XI. We try the `en` config first; if that
-    fails, we fall back to streaming the top-level split.
+    Load `n` documents from MSMARCO-XI. First checks for a local json subset file;
+    otherwise streams from HuggingFace.
     """
+    if local_path and local_path.exists():
+        print(f"[dataset] loading local subset from {local_path} ...", flush=True)
+        try:
+            with open(local_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                docs = data.get("docs", [])
+                if docs:
+                    print(f"[dataset] loaded {len(docs[:n])} documents from local cache", flush=True)
+                    return docs[:n]
+        except Exception as e:
+            print(f"[dataset] failed to load local subset ({e}); falling back to HF stream", flush=True)
+
     try:
         from datasets import load_dataset  # type: ignore
     except ImportError as exc:
@@ -296,22 +307,38 @@ def load_dataset(n: int, langs: List[str]) -> List[Dict]:
     for lang in langs:
         if len(docs) >= n:
             break
+        config_name = "default" if lang in ("en", "default") else lang
         try:
-            print(f"[dataset] loading config '{lang}' from {DATASET_ID} ...", flush=True)
-            ds = load_dataset(DATASET_ID, lang, split="train", streaming=True)
+            print(f"[dataset] loading config '{config_name}' from {DATASET_ID} ...", flush=True)
+            ds = load_dataset(DATASET_ID, config_name, split="train", streaming=True)
         except Exception as e:
-            print(f"[dataset] config '{lang}' failed ({e}); trying top-level stream", flush=True)
+            print(f"[dataset] config '{config_name}' failed ({e}); trying default stream", flush=True)
             try:
-                ds = load_dataset(DATASET_ID, split="train", streaming=True)
+                ds = load_dataset(DATASET_ID, "default", split="train", streaming=True)
             except Exception as e2:
-                print(f"[dataset] top-level stream also failed: {e2}", file=sys.stderr)
+                print(f"[dataset] default stream also failed: {e2}", file=sys.stderr)
                 continue
 
         for row in ds:
             if len(docs) >= n:
                 break
-            # MSMARCO-XI rows contain a 'text' / 'passage' field; be defensive.
-            text = row.get("text") or row.get("passage") or row.get("document") or row.get("content")
+            text = None
+            pos = row.get("positive_passages")
+            if isinstance(pos, dict) and pos:
+                first_val = next(iter(pos.values()))
+                if isinstance(first_val, str):
+                    text = first_val
+                elif isinstance(first_val, dict):
+                    text = first_val.get("passage") or first_val.get("text") or first_val.get("document")
+            elif isinstance(pos, list) and pos:
+                first = pos[0]
+                if isinstance(first, str):
+                    text = first
+                elif isinstance(first, dict):
+                    text = first.get("passage") or first.get("text") or first.get("document")
+            if not text:
+                text = row.get("text") or row.get("passage") or row.get("document") or row.get("content")
+
             if not text or not isinstance(text, str):
                 continue
             text = text.strip()
@@ -321,12 +348,20 @@ def load_dataset(n: int, langs: List[str]) -> List[Dict]:
             if key in seen:
                 continue
             seen.add(key)
+            query = row.get("query") or row.get("question") or ""
+            answers = row.get("answers") or []
+            if not isinstance(answers, list):
+                answers = [answers] if answers else []
+            answer = answers[0] if answers and isinstance(answers[0], str) else ""
+
             docs.append({
                 "id": key,
                 "text": text,
-                "language": lang,
+                "language": row.get("language") or lang,
                 "title": row.get("title") or "",
                 "url": row.get("url") or "",
+                "query": query if isinstance(query, str) else "",
+                "answer": answer,
                 "source": "msmarco-xi",
             })
 
@@ -388,9 +423,10 @@ def main() -> int:
     vs_dir = out_dir / "vector-stores"
     vs_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[ingest] downloading {args.n} docs from MSMARCO-XI (langs={args.langs})", flush=True)
+    print(f"[ingest] downloading/loading {args.n} docs from MSMARCO-XI (langs={args.langs})", flush=True)
     t0 = time.time()
-    docs = load_dataset(args.n, args.langs)
+    subset_path = out_dir / "msmarco-xi-subset.json"
+    docs = load_dataset(args.n, args.langs, subset_path)
     if not docs:
         print("[ingest] no documents loaded - aborting", file=sys.stderr)
         return 1

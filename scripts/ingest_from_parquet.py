@@ -25,7 +25,13 @@ import pyarrow.parquet as pq
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PARQUET_PATH = Path(os.environ.get("MSMARCO_PARQUET", "/tmp/sanval.parquet"))
+def default_parquet_path() -> Path:
+    p1 = Path("data/sanval.parquet")
+    if p1.exists():
+        return p1
+    return Path("/tmp/sanval.parquet")
+
+PARQUET_PATH = Path(os.environ.get("MSMARCO_PARQUET", str(default_parquet_path())))
 OUT_DIR = Path(os.environ.get("OUT_DIR", "data"))
 N_DOCS = int(os.environ.get("N_DOCS", "500"))
 EMBEDDING_DIM = 384

@@ -53,7 +53,7 @@ export function Hero({ hasStarted }: HeroProps) {
           {hasStarted ? "Pipeline active" : "Awaiting input"}
         </span>
         <span className="opacity-40">·</span>
-        <span className="tabular">Sarvam Saaras v3 · GLM-4.5</span>
+        <span className="tabular">Sarvam Saaras v3 · Sarvam-105B</span>
       </div>
     </section>
   );

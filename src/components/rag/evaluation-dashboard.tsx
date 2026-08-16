@@ -69,7 +69,8 @@ export function EvaluationDashboard() {
   const [report, setReport] = useState<BenchmarkReport | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [includeFullPipeline, setIncludeFullPipeline] = useState(false);
+  const [includeFullPipeline, setIncludeFullPipeline] = useState(true);
+  const [engine, setEngine] = useState<"fast" | "sarvam">("fast");
 
   const runBenchmark = async () => {
     setRunning(true);
@@ -80,7 +81,8 @@ export function EvaluationDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           includeFullPipeline,
-          fullPipelineQueryCount: 5,
+          engine,
+          fullPipelineQueryCount: engine === "sarvam" ? 5 : undefined,
         }),
       });
       const data = await res.json();
@@ -104,25 +106,30 @@ export function EvaluationDashboard() {
             <BarChart3 className="w-4 h-4 text-forest-700" />
             <span className="eyebrow">Evaluation Dashboard</span>
           </div>
-          <h2 className="font-serif text-2xl text-forest-900">P50 · P70 · P100 benchmarks</h2>
+          <h2 className="font-serif text-2xl text-forest-900">P50 · P70 · P100 Full-Pipeline Benchmarks</h2>
           <p className="text-sm text-forest-600 mt-1">
-            Latency measured across {report?.queries.length ?? 31} queries × 4 chunking strategies.
-            Real wall-clock measurements, not estimates.
+            End-to-end wall-clock latency (Input Guardrails → Hybrid BM25 Retrieval → Grounded Synthesizer → Output Guardrails) across 31 queries × 4 chunking strategies.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button suppressHydrationWarning
-            onClick={() => setIncludeFullPipeline(!includeFullPipeline)}
-            disabled={running}
-            className={cn(
-              "px-3 py-1.5 text-xs rounded-full border transition-colors",
-              includeFullPipeline
-                ? "bg-forest-700 border-forest-800 text-forest-50"
-                : "bg-white border-forest-200 text-forest-700 hover:bg-forest-50"
-            )}
-          >
-            + Full-pipeline (LLM)
-          </button>
+          <div className="flex items-center gap-1 bg-forest-100 rounded-full p-0.5 mr-1">
+            <button suppressHydrationWarning
+              onClick={() => setEngine("fast")}
+              className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-colors ${
+                engine === "fast" ? "bg-forest-700 text-white shadow-sm" : "text-forest-600"
+              }`}
+            >
+              Fast Local (&lt;50ms)
+            </button>
+            <button suppressHydrationWarning
+              onClick={() => setEngine("sarvam")}
+              className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-colors ${
+                engine === "sarvam" ? "bg-forest-700 text-white shadow-sm" : "text-forest-600"
+              }`}
+            >
+              Sarvam Cloud
+            </button>
+          </div>
           <Button
             onClick={runBenchmark}
             disabled={running}

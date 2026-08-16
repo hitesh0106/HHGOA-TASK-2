@@ -36,6 +36,7 @@ import { runHarness, type HarnessOutput } from "./llm/harness";
 export interface PipelineRequest {
   query: string;
   strategy: string;
+  engine?: "fast" | "sarvam"; // default "fast"
   topK?: number;
   minScore?: number;
   maxContextTokens?: number;
@@ -56,6 +57,7 @@ export interface PipelineStageTimings {
 export interface PipelineResponse {
   query: string;
   strategy: string;
+  engine: "fast" | "sarvam";
   answer: string;
   confidence: HarnessOutput["confidence"];
   grounded: boolean;
@@ -88,6 +90,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
   const tStart = performance.now();
   const query = req.query.trim();
   const strategy = req.strategy;
+  const engine = req.engine ?? "fast";
 
   // -----------------------------------------------------------------------
   // Stage 1: input guardrails
@@ -103,6 +106,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
     return buildBlockedResponse({
       query,
       strategy,
+      engine,
       blockReasons: inputVerdict.reasons,
       inputGuardrails,
       inputGuardrailsMs,
@@ -166,6 +170,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
     context: retrieval.context,
     contextChunks: retrieval.scoredChunks,
     strategy,
+    engine,
     temperature: 0.2,
     maxTokens: 512,
     timeoutMs: 12_000,
@@ -218,6 +223,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
   return {
     query,
     strategy,
+    engine,
     answer: finalAnswer,
     confidence: blocked ? "refused" : harness.confidence,
     grounded: blocked ? false : harness.grounded,
@@ -257,6 +263,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
 function buildBlockedResponse(args: {
   query: string;
   strategy: string;
+  engine?: "fast" | "sarvam";
   blockReasons: string[];
   inputGuardrails: GuardrailDecision[];
   inputGuardrailsMs: number;
@@ -266,15 +273,25 @@ function buildBlockedResponse(args: {
   retrievalWarnings?: string[];
   totalMs: number;
 }): PipelineResponse {
+  const combined = combineDecisions(
+    args.retrieval
+      ? [...args.inputGuardrails, args.retrieval.guardrail]
+      : args.inputGuardrails
+  );
+
   return {
     query: args.query,
     strategy: args.strategy,
-    answer: "I cannot answer this question due to safety or context constraints.",
+    engine: args.engine ?? "fast",
+    answer:
+      "I don't have enough information in the retrieved context to answer this question confidently.",
     confidence: "refused",
     grounded: false,
     citations: [],
     sources: args.retrieval?.scoredChunks ?? [],
-    contextPreview: args.retrieval?.context.slice(0, 800) ?? "",
+    contextPreview: args.retrieval
+      ? args.retrieval.context.slice(0, 800) + (args.retrieval.context.length > 800 ? "…" : "")
+      : "",
     contextTokenCount: args.retrieval?.contextTokenCount ?? 0,
     retrievalStats: args.retrieval?.stats ?? {
       strategy: args.strategy,
@@ -287,12 +304,12 @@ function buildBlockedResponse(args: {
     guardrails: {
       input: args.inputGuardrails,
       output: [],
-      combined: combineDecisions(args.inputGuardrails),
+      combined,
     },
     harness: {
       attempts: 0,
       finishReason: null,
-      warnings: [],
+      warnings: ["Pipeline short-circuited by guardrail."],
     },
     timings: {
       inputGuardrailsMs: args.inputGuardrailsMs,
@@ -304,7 +321,7 @@ function buildBlockedResponse(args: {
     },
     blocked: true,
     blockReasons: args.blockReasons,
-    // A blocked pipeline is NOT an error — it's a successful refusal.
+    // A blocked pipeline is NOT a network failure — it's a successful refusal.
     // The system correctly decided not to answer. ok=true means "the pipeline
     // ran successfully and returned a decision", not "an answer was produced".
     ok: true,

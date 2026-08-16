@@ -1,0 +1,37 @@
+{
+  "dataset": "ai4bharat/MSMARCO-XI",
+  "split": "validation/sanval.parquet",
+  "doc_count": 500,
+  "strategies": [
+    {
+      "strategy": "fixed",
+      "chunk_count": 526,
+      "doc_count": 500,
+      "build_time_sec": 0.096,
+      "file": "data\\vector-stores\\fixed.json"
+    },
+    {
+      "strategy": "overlapping",
+      "chunk_count": 526,
+      "doc_count": 500,
+      "build_time_sec": 0.104,
+      "file": "data\\vector-stores\\overlapping.json"
+    },
+    {
+      "strategy": "semantic",
+      "chunk_count": 800,
+      "doc_count": 500,
+      "build_time_sec": 0.109,
+      "file": "data\\vector-stores\\semantic.json"
+    },
+    {
+      "strategy": "metadata-aware",
+      "chunk_count": 507,
+      "doc_count": 500,
+      "build_time_sec": 0.097,
+      "file": "data\\vector-stores\\metadata-aware.json"
+    }
+  ],
+  "embedding_dim": 384,
+  "total_time_sec": 1.389
+}

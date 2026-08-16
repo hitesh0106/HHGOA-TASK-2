@@ -1,10 +1,12 @@
-"""Download Sanskrit validation parquet for MSMARCO-XI."""
+import os
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 URL = "https://huggingface.co/datasets/ai4bharat/MSMARCO-XI/resolve/main/validation/sanval.parquet"
-OUT = "/tmp/sanval.parquet"
+OUT = os.environ.get("OUT_PARQUET", "data/sanval.parquet")
+Path(OUT).parent.mkdir(parents=True, exist_ok=True)
 
 def log(msg):
     print(msg, flush=True)

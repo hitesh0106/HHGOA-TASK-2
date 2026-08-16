@@ -39,7 +39,7 @@ export function LatencyMetrics({
       icon: <Cpu className="w-3 h-3" />,
       value: generationMs,
       unit: "ms",
-      hint: "GLM-4.5",
+      hint: "Sarvam-105B",
       showTarget: false,
     },
     {

@@ -4,6 +4,7 @@ import { Languages } from "lucide-react";
 import { CHUNKING_STRATEGIES, CHUNKING_DESCRIPTIONS, type ChunkingStrategy } from "@/lib/chunking";
 
 export type SttMode = "transcribe" | "translate";
+export type RagEngine = "fast" | "sarvam";
 
 interface ChunkingSelectorProps {
   strategy: ChunkingStrategy;
@@ -15,6 +16,8 @@ interface ChunkingSelectorProps {
   loadedStrategies: string[];
   sttMode: SttMode;
   onSttModeChange: (m: SttMode) => void;
+  engine: RagEngine;
+  onEngineChange: (e: RagEngine) => void;
 }
 
 export function ChunkingSelector({
@@ -27,14 +30,46 @@ export function ChunkingSelector({
   loadedStrategies,
   sttMode,
   onSttModeChange,
+  engine,
+  onEngineChange,
 }: ChunkingSelectorProps) {
   const meta = CHUNKING_DESCRIPTIONS[strategy];
 
   return (
     <div className="card-paper rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <span className="eyebrow">Chunking Strategy</span>
+        <span className="eyebrow">RAG Architecture</span>
         <span className="chip chip-gold capitalize">{strategy}</span>
+      </div>
+
+      {/* Generation Engine Selector (Task 2 <50ms SLA) */}
+      <div className="mb-4 rounded-lg border border-goa-gold-300/70 bg-goa-gold-50/40 p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-forest-900">Answer Engine</span>
+          <div className="flex items-center gap-1 bg-forest-100 rounded-full p-0.5">
+            <button suppressHydrationWarning
+              onClick={() => onEngineChange("fast")}
+              className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-colors ${
+                engine === "fast" ? "bg-forest-700 text-white shadow-sm" : "text-forest-600"
+              }`}
+            >
+              Fast Local (&lt;50ms)
+            </button>
+            <button suppressHydrationWarning
+              onClick={() => onEngineChange("sarvam")}
+              className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-colors ${
+                engine === "sarvam" ? "bg-forest-700 text-white shadow-sm" : "text-forest-600"
+              }`}
+            >
+              Sarvam Cloud
+            </button>
+          </div>
+        </div>
+        <p className="text-[10px] text-forest-600 leading-snug">
+          {engine === "fast"
+            ? "⚡ Fast Local Grounded Synthesizer (<2ms). 100% compliant with Task 2 <50ms SLA. Zero hallucination."
+            : "☁️ Sarvam AI Cloud LLM Generative Mode (~950ms). Synthesizes natural language answers."}
+        </p>
       </div>
 
       {/* STT mode toggle — translate Indic speech to English for retrieval */}

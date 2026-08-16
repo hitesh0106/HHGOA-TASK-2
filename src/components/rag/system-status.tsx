@@ -53,7 +53,7 @@ export function SystemStatus({
       label: "LLM",
       icon: <Cpu className="w-3.5 h-3.5" />,
       status: "online",
-      detail: "GLM-4.5 · via z-ai-web-dev-sdk",
+      detail: "Sarvam-105B · via Sarvam AI API",
     },
     {
       label: "RAG Pipeline",

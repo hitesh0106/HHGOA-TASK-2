@@ -11,6 +11,7 @@ import path from "node:path";
 import { getVectorStore, getAllLoadedStrategies } from "./vector-db";
 import { setIdf } from "./embeddings";
 import { CHUNKING_STRATEGIES } from "./chunking";
+import { ensureDatasetLoaded } from "./dataset-index";
 
 let initPromise: Promise<{ loaded: string[]; idfLoaded: boolean }> | null = null;
 
@@ -32,6 +33,9 @@ export async function ensureVectorStoresLoaded(): Promise<{
     } catch {
       // IDF missing is non-fatal; embeddings will fall back to pure TF
     }
+
+    // Load dataset documents and query index
+    await ensureDatasetLoaded();
 
     // Load all four strategies
     for (const s of CHUNKING_STRATEGIES) {
