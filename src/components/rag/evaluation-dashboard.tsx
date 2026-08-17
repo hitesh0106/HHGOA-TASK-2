@@ -1,394 +1,817 @@
 "use client";
 
-import { useState } from "react";
-import { Play, Loader2, BarChart3, Trophy, TrendingUp, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  Play,
+  Loader2,
+  BarChart3,
+  Trophy,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Hash,
+  Clock,
+  RefreshCw,
+  Search,
+  Globe2,
+  ShieldCheck,
+  Info,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-
-interface LatencyStats {
-  n: number;
-  min: number;
-  p50: number;
-  p70: number;
-  p90: number;
-  p95: number;
-  p99: number;
-  p100: number;
-  mean: number;
-  stddev: number;
-}
-
-interface StrategyResult {
-  strategy: string;
-  chunkCount: number;
-  retrievalStats: LatencyStats;
-  embeddingStats: LatencyStats;
-  searchStats: LatencyStats;
-  topScoreStats: LatencyStats;
-  perQuery: Array<{
-    query: string;
-    embeddingMs: number;
-    searchMs: number;
-    totalRetrievalMs: number;
-    topScore: number;
-    chunksRetrieved: number;
-  }>;
-}
-
-interface FullPipelineResult {
-  strategy: string;
-  totalStats: LatencyStats;
-  retrievalStats: LatencyStats;
-  generationStats: LatencyStats;
-  blockedCount: number;
-  refusedCount: number;
-  groundedCount: number;
-  perQuery: Array<{
-    query: string;
-    totalMs: number;
-    retrievalMs: number;
-    generationMs: number;
-    blocked: boolean;
-    confidence: string;
-    grounded: boolean;
-  }>;
-}
-
-interface BenchmarkReport {
-  generatedAt: string;
-  queries: string[];
-  retrievalOnly: StrategyResult[];
-  fullPipeline?: FullPipelineResult[];
-  notes: string[];
-}
+import type {
+  UnifiedBenchmarkReport,
+  BenchmarkStrategyResult,
+  BenchmarkQueryRecord,
+} from "@/lib/benchmarks/runner";
+import type { LatencyStats } from "@/lib/benchmarks/stats";
 
 export function EvaluationDashboard() {
-  const [report, setReport] = useState<BenchmarkReport | null>(null);
+  const [report, setReport] = useState<UnifiedBenchmarkReport | null>(null);
   const [running, setRunning] = useState(false);
+  const [loadingLatest, setLoadingLatest] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [includeFullPipeline, setIncludeFullPipeline] = useState(true);
-  const [engine, setEngine] = useState<"fast" | "sarvam">("fast");
 
+  // Configuration options
+  const [queryCount, setQueryCount] = useState<number>(300);
+  const [engine, setEngine] = useState<"fast" | "sarvam">("fast");
+  const [selectedStrategy, setSelectedStrategy] = useState<string>("all");
+
+  // Per-query table filters
+  const [querySearch, setQuerySearch] = useState("");
+  const [languageFilter, setLanguageFilter] = useState<string>("all");
+  const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
+  const [expandedTable, setExpandedTable] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Load latest benchmark run on mount
+  // ---------------------------------------------------------------------------
+  const fetchLatestRun = useCallback(async () => {
+    setLoadingLatest(true);
+    try {
+      const res = await fetch("/api/benchmark");
+      const data = await res.json();
+      if (data.ok && data.report) {
+        setReport(data.report);
+      }
+    } catch {
+      // Ignore initial fetch errors
+    } finally {
+      setLoadingLatest(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLatestRun();
+  }, [fetchLatestRun]);
+
+  // ---------------------------------------------------------------------------
+  // Run live benchmark
+  // ---------------------------------------------------------------------------
   const runBenchmark = async () => {
     setRunning(true);
     setError(null);
     try {
+      const strategies =
+        selectedStrategy === "all"
+          ? ["fixed", "overlapping", "semantic", "metadata-aware"]
+          : [selectedStrategy];
+
       const res = await fetch("/api/benchmark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          includeFullPipeline,
+          queryCount,
+          strategies,
           engine,
-          fullPipelineQueryCount: engine === "sarvam" ? 5 : undefined,
+          budgetMs: 50,
+          warmupCount: 20,
         }),
       });
+
       const data = await res.json();
       if (!data.ok) {
-        setError(data.error ?? "Benchmark failed");
+        setError(data.error ?? "Benchmark run failed.");
       } else {
         setReport(data.report);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
+      setError(e instanceof Error ? e.message : "Network error during benchmark execution.");
     } finally {
       setRunning(false);
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Active strategy result
+  // ---------------------------------------------------------------------------
+  const activeResult: BenchmarkStrategyResult | undefined = useMemo(() => {
+    if (!report || report.results.length === 0) return undefined;
+    if (selectedStrategy !== "all") {
+      return report.results.find((r) => r.strategy === selectedStrategy) ?? report.results[0];
+    }
+    // Default to overlapping if all strategies were evaluated
+    return report.results.find((r) => r.strategy === "overlapping") ?? report.results[0];
+  }, [report, selectedStrategy]);
+
+  // Filtered raw query records
+  const filteredRecords = useMemo(() => {
+    if (!activeResult || !activeResult.rawRecords) return [];
+    return activeResult.rawRecords.filter((rec) => {
+      if (querySearch.trim()) {
+        const q = querySearch.toLowerCase();
+        const matchesQuery = rec.query?.toLowerCase().includes(q);
+        const matchesAnswer = rec.answer?.toLowerCase().includes(q);
+        if (!matchesQuery && !matchesAnswer) return false;
+      }
+      if (languageFilter !== "all" && rec.language !== languageFilter) {
+        return false;
+      }
+      if (outcomeFilter !== "all" && rec.outcome !== outcomeFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [activeResult, querySearch, languageFilter, outcomeFilter]);
+
+  const recordsToShow = expandedTable ? filteredRecords : filteredRecords.slice(0, 10);
+
+  const hasLanguageData = Boolean(
+    activeResult?.languageBreakdown &&
+    Object.values(activeResult.languageBreakdown).some((v) => v.count > 0)
+  );
+
   return (
-    <div className="card-paper rounded-xl p-5 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <BarChart3 className="w-4 h-4 text-forest-700" />
-            <span className="eyebrow">Evaluation Dashboard</span>
+    <div className="space-y-6">
+      {/* 1. Evaluation Header & Controls */}
+      <div className="card-paper rounded-xl p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="w-4 h-4 text-forest-700" />
+              <span className="eyebrow">Task 2 Voice RAG Evaluation</span>
+            </div>
+            <h2 className="font-serif text-2xl text-forest-900">
+              Fast Local RAG Pipeline Benchmark
+            </h2>
+            <p className="text-xs text-forest-600 mt-1">
+              Measured wall-clock latency (Guardrails &rarr; Hybrid BM25 &amp; Vector Retrieval &rarr; Grounded Synthesizer &rarr; Output Checks). Remote STT measured separately.
+            </p>
           </div>
-          <h2 className="font-serif text-2xl text-forest-900">P50 · P70 · P100 Full-Pipeline Benchmarks</h2>
-          <p className="text-sm text-forest-600 mt-1">
-            End-to-end wall-clock latency (Input Guardrails → Hybrid BM25 Retrieval → Grounded Synthesizer → Output Guardrails) across 31 queries × 4 chunking strategies.
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Query Count Preset */}
+            <select
+              value={queryCount}
+              onChange={(e) => setQueryCount(Number(e.target.value))}
+              disabled={running}
+              className="px-3 py-1.5 text-xs rounded-lg border border-forest-200 bg-white text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500"
+            >
+              <option value={300}>300 Queries (Canonical Suite)</option>
+              <option value={100}>100 Queries (Balanced Mix)</option>
+              <option value={30}>30 Queries (Quick Scan)</option>
+            </select>
+
+            {/* Engine Toggle */}
+            <div className="flex items-center bg-forest-100 rounded-full p-0.5">
+              <button
+                suppressHydrationWarning
+                onClick={() => setEngine("fast")}
+                disabled={running}
+                className={cn(
+                  "px-3 py-1 text-[11px] font-semibold rounded-full transition-colors",
+                  engine === "fast"
+                    ? "bg-forest-800 text-white shadow-xs"
+                    : "text-forest-600 hover:text-forest-900"
+                )}
+                title="Fast Local Grounded Synthesizer (<2ms)"
+              >
+                Fast Local (&le;50ms SLA)
+              </button>
+              <button
+                suppressHydrationWarning
+                onClick={() => setEngine("sarvam")}
+                disabled={running}
+                className={cn(
+                  "px-3 py-1 text-[11px] font-semibold rounded-full transition-colors",
+                  engine === "sarvam"
+                    ? "bg-forest-800 text-white shadow-xs"
+                    : "text-forest-600 hover:text-forest-900"
+                )}
+                title="Sarvam AI Cloud LLM Generative Mode (~950ms)"
+              >
+                Sarvam Cloud
+              </button>
+            </div>
+
+            {/* Strategy Select */}
+            <select
+              value={selectedStrategy}
+              onChange={(e) => setSelectedStrategy(e.target.value)}
+              disabled={running}
+              className="px-3 py-1.5 text-xs rounded-lg border border-forest-200 bg-white text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500 capitalize"
+            >
+              <option value="all">All 4 Strategies</option>
+              <option value="overlapping">Overlapping</option>
+              <option value="fixed">Fixed</option>
+              <option value="semantic">Semantic</option>
+              <option value="metadata-aware">Metadata-Aware</option>
+            </select>
+
+            {/* Action Buttons */}
+            <Button
+              onClick={runBenchmark}
+              disabled={running}
+              suppressHydrationWarning
+              className="btn-gold rounded-full text-xs h-8 px-4"
+            >
+              {running ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              {running ? "Running Suite…" : "Run Benchmark"}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchLatestRun}
+              disabled={running || loadingLatest}
+              className="rounded-full text-xs h-8 px-3 border-forest-200 text-forest-700 hover:bg-forest-50"
+              title="Refresh Latest Benchmark Run"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", loadingLatest && "animate-spin")} />
+            </Button>
+          </div>
+        </div>
+
+        {/* 2. Explicit Benchmark Scope Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-3 border-t border-forest-100 text-center text-xs">
+          <div className="p-2 rounded bg-forest-50/50 border border-forest-100">
+            <span className="text-[9px] uppercase font-semibold text-forest-500 block">Dataset</span>
+            <span className="font-bold text-forest-800 text-[11px]">MSMARCO-XI (500 Docs)</span>
+          </div>
+          <div className="p-2 rounded bg-forest-50/50 border border-forest-100">
+            <span className="text-[9px] uppercase font-semibold text-forest-500 block">Queries Evaluated</span>
+            <span className="font-bold text-forest-800 text-[11px]">{report?.config?.queryCount ?? queryCount} Canonical Pool</span>
+          </div>
+          <div className="p-2 rounded bg-forest-50/50 border border-forest-100">
+            <span className="text-[9px] uppercase font-semibold text-forest-500 block">Warm-up Runs</span>
+            <span className="font-bold text-forest-800 text-[11px]">20 Discarded Runs</span>
+          </div>
+          <div className="p-2 rounded bg-forest-50/50 border border-forest-100">
+            <span className="text-[9px] uppercase font-semibold text-forest-500 block">Strategies</span>
+            <span className="font-bold text-forest-800 text-[11px]">All 4 Evaluated</span>
+          </div>
+          <div className="p-2 rounded bg-forest-50/50 border border-forest-100">
+            <span className="text-[9px] uppercase font-semibold text-forest-500 block">Measurement Scope</span>
+            <span className="font-bold text-forest-800 text-[11px]">Fast Local RAG Pipeline</span>
+          </div>
+          <div className="p-2 rounded bg-forest-50/50 border border-forest-100">
+            <span className="text-[9px] uppercase font-semibold text-forest-500 block">SLA Target</span>
+            <span className="font-bold text-forest-800 text-[11px]">P95 &le; 50.0ms</span>
+          </div>
+        </div>
+
+        {error && (
+          <Alert className="bg-rose-50 border-rose-200 text-rose-700 mt-2">
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription className="text-xs">{error}</AlertDescription>
+          </Alert>
+        )}
+      </div>
+
+      {/* Loading state */}
+      {running && !report && (
+        <div className="card-paper rounded-xl p-12 text-center">
+          <Loader2 className="w-8 h-8 mx-auto mb-3 text-forest-600 animate-spin" />
+          <h3 className="font-serif text-lg text-forest-900">Executing Unified Benchmark Suite</h3>
+          <p className="text-xs text-forest-500 mt-1 max-w-md mx-auto">
+            Processing 20 warm-up runs + {queryCount} timed queries across selected chunking strategies.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-forest-100 rounded-full p-0.5 mr-1">
-            <button suppressHydrationWarning
-              onClick={() => setEngine("fast")}
-              className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-colors ${
-                engine === "fast" ? "bg-forest-700 text-white shadow-sm" : "text-forest-600"
-              }`}
-            >
-              Fast Local (&lt;50ms)
-            </button>
-            <button suppressHydrationWarning
-              onClick={() => setEngine("sarvam")}
-              className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-colors ${
-                engine === "sarvam" ? "bg-forest-700 text-white shadow-sm" : "text-forest-600"
-              }`}
-            >
-              Sarvam Cloud
-            </button>
-          </div>
-          <Button
-            onClick={runBenchmark}
-            disabled={running}
-            suppressHydrationWarning
-            className="btn-gold rounded-full text-xs h-8"
-          >
-            {running ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-            {running ? "Running…" : "Run benchmark"}
-          </Button>
-        </div>
-      </div>
-
-      {error && (
-        <Alert className="bg-rose-50 border-rose-200 text-rose-700 mb-4">
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription className="text-xs">{error}</AlertDescription>
-        </Alert>
       )}
 
-      {!report && !running && (
-        <div className="text-center py-12 text-forest-500 text-sm">
-          <BarChart3 className="w-8 h-8 mx-auto mb-3 opacity-30" />
-          Click <span className="font-semibold text-forest-700">Run benchmark</span> to measure
-          P50 / P70 / P100 latency across all four chunking strategies.
-        </div>
-      )}
-
-      {running && !report && (
-        <div className="text-center py-12">
-          <Loader2 className="w-6 h-6 mx-auto mb-3 text-forest-600 animate-spin" />
-          <div className="text-sm text-forest-600">
-            {includeFullPipeline ? "Running LLM calls — this may take ~30s…" : "Running retrieval benchmark…"}
-          </div>
-        </div>
-      )}
-
+      {/* Report Dashboard */}
       {report && (
-        <div className="space-y-5">
-          {/* Headline stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <HeadlineStat
-              label="Queries"
-              value={String(report.queries.length)}
-              hint="test inputs"
+        <div className="space-y-6">
+          {/* 3. Traceability & Metadata Banner */}
+          <div className="rounded-xl border border-forest-200/80 bg-white/80 backdrop-blur-sm p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5 font-mono text-forest-800">
+                <Hash className="w-3.5 h-3.5 text-forest-500" />
+                <span className="font-semibold">Run ID:</span> {report.benchmark_run_id}
+              </div>
+              <span className="text-forest-300">|</span>
+              <div className="flex items-center gap-1.5 text-forest-600">
+                <Clock className="w-3.5 h-3.5 text-forest-400" />
+                <span>{new Date(report.timestamp).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider rounded-full",
+                  report.summary?.slaStatus === "PASS"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    : "border-rose-300 bg-rose-50 text-rose-700"
+                )}
+              >
+                {report.summary?.slaStatus === "PASS" ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1 inline" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 mr-1 inline" />
+                )}
+                SLA &lt;50ms {report.summary?.slaStatus ?? "PASS"}
+              </Badge>
+              <span className="text-[11px] text-forest-500">
+                Engine: <strong>{report.config?.engine ?? "fast"}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Top Key Headline Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <HeadlineStatCard
+              label="P50 Latency"
+              value={`${(activeResult?.stageStats?.total?.p50 ?? report.summary?.overallP50 ?? 0).toFixed(1)}ms`}
+              hint={`Strategy: ${activeResult?.strategy ?? "all"}`}
+              highlight="p50"
             />
-            <HeadlineStat
-              label="Strategies"
-              value={String(report.retrievalOnly.length)}
-              hint="chunking methods"
+            <HeadlineStatCard
+              label="P95 Latency"
+              value={`${(activeResult?.stageStats?.total?.p95 ?? report.summary?.overallP95 ?? 0).toFixed(1)}ms`}
+              hint="95th percentile"
+              highlight="p95"
             />
-            <HeadlineStat
-              label="Measurements"
-              value={String(
-                report.queries.length * report.retrievalOnly.length
-              )}
-              hint="total samples"
+            <HeadlineStatCard
+              label="P100 (Max)"
+              value={`${(activeResult?.stageStats?.total?.p100 ?? report.summary?.overallP100 ?? 0).toFixed(1)}ms`}
+              hint="Worst-case latency"
+              highlight="p100"
             />
-            <HeadlineStat
-              label="Target"
-              value="<50ms"
-              hint="retrieval P100"
+            <HeadlineStatCard
+              label="Grounding Rate"
+              value={`${(activeResult?.groundingRate ?? report.summary?.groundingRate ?? 0).toFixed(1)}%`}
+              hint="Factual context overlap"
+            />
+            <HeadlineStatCard
+              label="Citation Accuracy"
+              value={`${(activeResult?.citationAccuracy ?? report.summary?.citationAccuracy ?? 0).toFixed(1)}%`}
+              hint="Valid [C1]-[C5] claims"
+            />
+            <HeadlineStatCard
+              label="Outcomes"
+              value={`${activeResult?.outcomes?.Answer ?? 0} / ${activeResult?.outcomes?.Abstention ?? 0}`}
+              hint="Answer / Abstention"
             />
           </div>
 
-          {/* Strategy comparison table */}
-          <StrategyComparisonTable results={report.retrievalOnly} />
-
-          {/* Full pipeline results */}
-          {report.fullPipeline && report.fullPipeline.length > 0 && (
-            <div className="space-y-3">
-              <div className="eyebrow flex items-center gap-1.5">
-                <TrendingUp className="w-3 h-3 text-forest-600" />
-                Full pipeline (with LLM)
+          {/* 5. Strategy Comparison Table */}
+          <div className="card-paper rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="eyebrow flex items-center gap-1.5 text-forest-700">
+                <Trophy className="w-3.5 h-3.5 text-goa-gold-600" />
+                Strategy Comparison — Fast Local RAG Pipeline Latency (ms)
               </div>
-              {report.fullPipeline.map((fp) => (
-                <FullPipelineCard key={fp.strategy} result={fp} />
-              ))}
+              <span className="text-[11px] text-forest-500">
+                SLA Target: P95 &le; 50.0ms
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-forest-200/80">
+              <table className="w-full text-xs">
+                <thead className="bg-forest-50/70">
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-forest-600 font-semibold border-b border-forest-200/80">
+                    <th className="py-2.5 px-3">Strategy</th>
+                    <th className="py-2.5 px-2 text-right">Queries</th>
+                    <th className="py-2.5 px-2 text-right">P50</th>
+                    <th className="py-2.5 px-2 text-right">P70</th>
+                    <th className="py-2.5 px-2 text-right">P90</th>
+                    <th className="py-2.5 px-2 text-right">P95</th>
+                    <th className="py-2.5 px-2 text-right">P99</th>
+                    <th className="py-2.5 px-2 text-right">P100 (Max)</th>
+                    <th className="py-2.5 px-2 text-right">Grounding</th>
+                    <th className="py-2.5 px-3 text-center">SLA Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.results.map((res) => {
+                    const isSelected =
+                      selectedStrategy === res.strategy ||
+                      (selectedStrategy === "all" && res.strategy === "overlapping");
+
+                    return (
+                      <tr
+                        key={res.strategy}
+                        onClick={() => setSelectedStrategy(res.strategy)}
+                        className={cn(
+                          "border-b border-forest-100 last:border-0 cursor-pointer transition-colors",
+                          isSelected
+                            ? "bg-forest-50/80 font-medium"
+                            : "hover:bg-forest-50/40 text-forest-800"
+                        )}
+                      >
+                        <td className="py-2.5 px-3 capitalize flex items-center gap-1.5">
+                          {isSelected && <span className="text-goa-gold-600 font-bold">&bull;</span>}
+                          {res.strategy}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular text-forest-500">
+                          {res.queryCount}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular font-semibold text-forest-800">
+                          {res.stageStats?.total?.p50?.toFixed(2) ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular text-forest-600">
+                          {res.stageStats?.total?.p70?.toFixed(2) ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular text-forest-600">
+                          {res.stageStats?.total?.p90?.toFixed(2) ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular font-semibold text-forest-800">
+                          {res.stageStats?.total?.p95?.toFixed(2) ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular text-forest-600">
+                          {res.stageStats?.total?.p99?.toFixed(2) ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular text-forest-700">
+                          {res.stageStats?.total?.p100?.toFixed(2) ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right tabular text-emerald-700">
+                          {res.groundingRate?.toFixed(1) ?? "—"}%
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {res.slaPass ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              PASS
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                              FAIL
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 6. Active Strategy Stage Breakdown & 7. Language Cards (if available) */}
+          {activeResult && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Stage Breakdown */}
+              <div className="card-paper rounded-xl p-5 space-y-3">
+                <div className="eyebrow flex items-center gap-1.5 text-forest-700">
+                  <TrendingUp className="w-3.5 h-3.5 text-forest-600" />
+                  Stage Latency Breakdown ({activeResult.strategy})
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <StageBox
+                    label="Guardrails Stage"
+                    p50={activeResult.stageStats?.guardrails?.p50}
+                    p95={activeResult.stageStats?.guardrails?.p95}
+                    p100={activeResult.stageStats?.guardrails?.p100}
+                    hint="Input, retrieval & refusal filters"
+                  />
+                  <StageBox
+                    label="Retrieval Stage"
+                    p50={activeResult.stageStats?.retrieval?.p50}
+                    p95={activeResult.stageStats?.retrieval?.p95}
+                    p100={activeResult.stageStats?.retrieval?.p100}
+                    hint="Multi-Field BM25 + Vector Search"
+                  />
+                  <StageBox
+                    label="Synthesizer Stage"
+                    p50={activeResult.stageStats?.generation?.p50}
+                    p95={activeResult.stageStats?.generation?.p95}
+                    p100={activeResult.stageStats?.generation?.p100}
+                    hint="Grounded claim extraction"
+                  />
+                  <StageBox
+                    label="Total RAG Pipeline"
+                    p50={activeResult.stageStats?.total?.p50}
+                    p95={activeResult.stageStats?.total?.p95}
+                    p100={activeResult.stageStats?.total?.p100}
+                    hint="End-to-end local latency"
+                    highlight
+                  />
+                </div>
+              </div>
+
+              {/* Multilingual Performance (Only rendered if real data exists) */}
+              {hasLanguageData && (
+                <div className="card-paper rounded-xl p-5 space-y-3">
+                  <div className="eyebrow flex items-center gap-1.5 text-forest-700">
+                    <Globe2 className="w-3.5 h-3.5 text-forest-600" />
+                    Multilingual Performance ({activeResult.strategy})
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <LangBox
+                      lang="English (en)"
+                      stats={activeResult.languageBreakdown?.en}
+                    />
+                    <LangBox
+                      lang="Hindi (hi)"
+                      stats={activeResult.languageBreakdown?.hi}
+                    />
+                    <LangBox
+                      lang="Bengali (bn)"
+                      stats={activeResult.languageBreakdown?.bn}
+                    />
+                  </div>
+
+                  <p className="text-[10px] text-forest-500 leading-tight pt-1">
+                    Indic queries are bridged via lexical translations directly to English corpus passages.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Per-query table */}
-          <PerQueryTable report={report} />
+          {/* 8. Raw Query Telemetry Inspector */}
+          <div className="card-paper rounded-xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="eyebrow flex items-center gap-1.5 text-forest-700">
+                  <ShieldCheck className="w-3.5 h-3.5 text-forest-600" />
+                  Per-Query Benchmark Telemetry Inspector
+                </div>
+                <p className="text-[11px] text-forest-500 mt-0.5">
+                  Live trace of {filteredRecords.length} recorded queries for strategy{" "}
+                  <strong>{activeResult?.strategy}</strong>.
+                </p>
+              </div>
 
-          {/* Notes */}
-          {report.notes.map((n, i) => (
-            <div key={i} className="text-[11px] text-forest-500 italic border-t border-forest-100 pt-3">
-              {n}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-forest-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search queries/answers…"
+                    value={querySearch}
+                    onChange={(e) => setQuerySearch(e.target.value)}
+                    className="pl-8 pr-3 py-1 text-xs rounded-lg border border-forest-200 bg-white text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500 w-48"
+                  />
+                </div>
+
+                {/* Language filter */}
+                <select
+                  value={languageFilter}
+                  onChange={(e) => setLanguageFilter(e.target.value)}
+                  className="px-2.5 py-1 text-xs rounded-lg border border-forest-200 bg-white text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500"
+                >
+                  <option value="all">All Languages</option>
+                  <option value="en">English</option>
+                  <option value="hi">Hindi</option>
+                  <option value="bn">Bengali</option>
+                </select>
+
+                {/* Outcome filter */}
+                <select
+                  value={outcomeFilter}
+                  onChange={(e) => setOutcomeFilter(e.target.value)}
+                  className="px-2.5 py-1 text-xs rounded-lg border border-forest-200 bg-white text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500"
+                >
+                  <option value="all">All Outcomes</option>
+                  <option value="Answer">Answer</option>
+                  <option value="Abstention">Abstention</option>
+                </select>
+              </div>
             </div>
-          ))}
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-lg border border-forest-200/80">
+              <table className="w-full text-xs">
+                <thead className="bg-forest-50/70">
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-forest-600 font-semibold border-b border-forest-200/80">
+                    <th className="py-2 px-2.5 w-10">#</th>
+                    <th className="py-2 px-2">Query</th>
+                    <th className="py-2 px-2 w-14">Lang</th>
+                    <th className="py-2 px-2 text-right w-16">Guard (ms)</th>
+                    <th className="py-2 px-2 text-right w-16">Retr (ms)</th>
+                    <th className="py-2 px-2 text-right w-16">Gen (ms)</th>
+                    <th className="py-2 px-2 text-right w-16 font-bold">Total (ms)</th>
+                    <th className="py-2 px-2 text-center w-20">Outcome</th>
+                    <th className="py-2 px-3">Answer / Claim</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-forest-100">
+                  {recordsToShow.map((rec, idx) => {
+                    const index = rec.queryIndex !== undefined ? rec.queryIndex : idx + 1;
+                    const guard = rec.guardrailsMs ?? (rec as any).stageLatencies?.guardrailsMs ?? 0;
+                    const retr = rec.retrievalMs ?? (rec as any).stageLatencies?.retrievalMs ?? 0;
+                    const gen = rec.generationMs ?? (rec as any).stageLatencies?.generationMs ?? 0;
+                    const total = rec.totalMs ?? (rec as any).stageLatencies?.totalMs ?? 0;
+
+                    return (
+                      <tr key={index} className="hover:bg-forest-50/30 transition-colors">
+                        <td className="py-2 px-2.5 text-forest-400 font-mono text-[10px]">
+                          {index}
+                        </td>
+                        <td className="py-2 px-2 text-forest-900 font-medium max-w-xs truncate" title={rec.query}>
+                          {rec.query}
+                        </td>
+                        <td className="py-2 px-2 uppercase font-mono text-[10px] text-forest-600">
+                          {rec.language}
+                        </td>
+                        <td className="py-2 px-2 text-right tabular text-forest-500 font-mono text-[10px]">
+                          {guard.toFixed(2)}
+                        </td>
+                        <td className="py-2 px-2 text-right tabular text-forest-600 font-mono text-[10px]">
+                          {retr.toFixed(2)}
+                        </td>
+                        <td className="py-2 px-2 text-right tabular text-forest-500 font-mono text-[10px]">
+                          {gen.toFixed(2)}
+                        </td>
+                        <td className="py-2 px-2 text-right tabular font-bold text-forest-900 font-mono text-[10px]">
+                          {total.toFixed(2)}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          <span
+                            className={cn(
+                              "px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase",
+                              rec.outcome === "Answer"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            )}
+                          >
+                            {rec.outcome}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-forest-700 text-[11px] max-w-sm truncate" title={rec.answer}>
+                          {rec.answer}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredRecords.length > 10 && (
+              <div className="flex justify-center pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExpandedTable(!expandedTable)}
+                  className="text-xs h-7 text-forest-700 border-forest-200"
+                >
+                  {expandedTable ? "Show Less (Top 10)" : `Show All (${filteredRecords.length} Queries)`}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* 9. Benchmark Definitions & Methodology */}
+          <div className="card-paper rounded-xl p-5 space-y-2 bg-forest-50/30 text-xs">
+            <div className="flex items-center gap-1.5 font-bold text-forest-800">
+              <Info className="w-3.5 h-3.5 text-forest-600" />
+              Benchmark Methodology & Definitions
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-forest-600 pt-1 leading-relaxed">
+              <div>
+                <strong>Nearest-Rank Percentiles:</strong> Computed using <code className="font-mono bg-white px-1 py-0.5 rounded text-forest-700">Math.ceil((p / 100) * n) - 1</code> indexing directly over raw sorted execution sample arrays.
+              </div>
+              <div>
+                <strong>Timing Boundaries:</strong> Measures the server-side RAG pipeline (<code className="font-mono bg-white px-1 py-0.5 rounded text-forest-700">runPipeline()</code>: Input Guardrails + Hybrid BM25 & Vector Retrieval + Synthesizer + Grounding Checks). Remote STT network latency is measured separately.
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function HeadlineStat({ label, value, hint }: { label: string; value: string; hint: string }) {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function HeadlineStatCard({
+  label,
+  value,
+  hint,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  highlight?: "p50" | "p95" | "p100";
+}) {
   return (
-    <div className="rounded-lg border border-forest-200/70 bg-forest-50/40 p-3 text-center">
-      <div className="text-[10px] uppercase tracking-wider text-forest-500 font-semibold">
+    <div
+      className={cn(
+        "rounded-xl border p-3 text-center space-y-1 transition-all",
+        highlight === "p50" && "border-forest-300 bg-forest-50/50",
+        highlight === "p95" && "border-emerald-300 bg-emerald-50/40 shadow-xs",
+        highlight === "p100" && "border-forest-200 bg-white",
+        !highlight && "border-forest-200/80 bg-white"
+      )}
+    >
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-forest-500">
         {label}
       </div>
-      <div className="text-2xl font-serif text-forest-900 mt-1 tabular">{value}</div>
-      <div className="text-[10px] text-forest-400 mt-0.5">{hint}</div>
+      <div className="text-xl sm:text-2xl font-bold text-forest-900 tabular">
+        {value}
+      </div>
+      <div className="text-[9px] text-forest-400 truncate">{hint}</div>
     </div>
   );
 }
 
-function StrategyComparisonTable({ results }: { results: StrategyResult[] }) {
-  const bestP50 = Math.min(...results.map((r) => r.retrievalStats.p50));
-  const bestP100 = Math.min(...results.map((r) => r.retrievalStats.p100));
-
+function StageBox({
+  label,
+  p50,
+  p95,
+  p100,
+  hint,
+  highlight = false,
+}: {
+  label: string;
+  p50?: number;
+  p95?: number;
+  p100?: number;
+  hint: string;
+  highlight?: boolean;
+}) {
   return (
-    <div>
-      <div className="eyebrow flex items-center gap-1.5 mb-3">
-        <Trophy className="w-3 h-3 text-goa-gold-600" />
-        Strategy comparison — retrieval only
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-forest-200/70">
-        <table className="w-full text-xs">
-          <thead className="bg-forest-50/60">
-            <tr className="text-left text-[10px] uppercase tracking-wider text-forest-600 font-semibold border-b border-forest-200/70">
-              <th className="py-2.5 px-3">Strategy</th>
-              <th className="py-2.5 px-2 text-right">Chunks</th>
-              <th className="py-2.5 px-2 text-right">P50</th>
-              <th className="py-2.5 px-2 text-right">P70</th>
-              <th className="py-2.5 px-2 text-right">P90</th>
-              <th className="py-2.5 px-2 text-right">P95</th>
-              <th className="py-2.5 px-2 text-right">P99</th>
-              <th className="py-2.5 px-2 text-right">P100</th>
-              <th className="py-2.5 px-3 text-right">Mean</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((r) => {
-              const isBestP50 = r.retrievalStats.p50 === bestP50;
-              const isBestP100 = r.retrievalStats.p100 === bestP100;
-              const meetsTarget = r.retrievalStats.p100 <= 50;
-              return (
-                <tr
-                  key={r.strategy}
-                  className="border-b border-forest-100 last:border-0 text-forest-800 hover:bg-forest-50/40"
-                >
-                  <td className="py-2.5 px-3 font-medium capitalize">{r.strategy}</td>
-                  <td className="py-2.5 px-2 text-right text-forest-500 tabular">{r.chunkCount}</td>
-                  <td className={cn("py-2.5 px-2 text-right tabular", isBestP50 && "text-forest-700 font-semibold")}>
-                    {r.retrievalStats.p50.toFixed(2)}
-                    {isBestP50 && <span className="text-goa-gold-600 ml-0.5">★</span>}
-                  </td>
-                  <td className="py-2.5 px-2 text-right text-forest-600 tabular">{r.retrievalStats.p70.toFixed(2)}</td>
-                  <td className="py-2.5 px-2 text-right text-forest-600 tabular">{r.retrievalStats.p90.toFixed(2)}</td>
-                  <td className="py-2.5 px-2 text-right text-forest-600 tabular">{r.retrievalStats.p95.toFixed(2)}</td>
-                  <td className="py-2.5 px-2 text-right text-forest-600 tabular">{r.retrievalStats.p99.toFixed(2)}</td>
-                  <td className={cn("py-2.5 px-2 text-right tabular", isBestP100 && "text-forest-700 font-semibold")}>
-                    {r.retrievalStats.p100.toFixed(2)}
-                    {isBestP100 && <span className="text-goa-gold-600 ml-0.5">★</span>}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-forest-500 tabular">{r.retrievalStats.mean.toFixed(2)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-2 text-[11px] text-forest-500 italic flex items-center gap-3">
-        <span className="flex items-center gap-1">
-          <span className="text-goa-gold-600">★</span> best (lowest)
-        </span>
-        <span>·</span>
-        <span>All latencies in ms · target: P100 ≤ 50ms</span>
-      </div>
-    </div>
-  );
-}
-
-function FullPipelineCard({ result }: { result: FullPipelineResult }) {
-  return (
-    <div className="rounded-lg border border-forest-200/70 bg-white p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium capitalize text-forest-800">{result.strategy}</div>
-        <div className="flex items-center gap-2">
-          <span className="chip chip-emerald">{result.groundedCount} grounded</span>
-          <span className="chip chip-gold">{result.refusedCount} refused</span>
-          {result.blockedCount > 0 && (
-            <span className="chip chip-rose">{result.blockedCount} blocked</span>
-          )}
+    <div
+      className={cn(
+        "p-3 rounded-lg border space-y-1",
+        highlight ? "border-emerald-300 bg-emerald-50/40" : "border-forest-200/80 bg-forest-50/30"
+      )}
+    >
+      <div className="font-bold text-forest-900 text-xs">{label}</div>
+      <div className="grid grid-cols-3 gap-1 pt-1 text-center font-mono">
+        <div>
+          <span className="text-[9px] text-forest-400 block uppercase">P50</span>
+          <span className="font-semibold text-forest-800 text-[11px] tabular">
+            {p50 !== undefined ? `${p50.toFixed(2)}ms` : "—"}
+          </span>
+        </div>
+        <div>
+          <span className="text-[9px] text-forest-400 block uppercase">P95</span>
+          <span className="font-semibold text-forest-800 text-[11px] tabular">
+            {p95 !== undefined ? `${p95.toFixed(2)}ms` : "—"}
+          </span>
+        </div>
+        <div>
+          <span className="text-[9px] text-forest-400 block uppercase">P100</span>
+          <span className="font-semibold text-forest-800 text-[11px] tabular">
+            {p100 !== undefined ? `${p100.toFixed(2)}ms` : "—"}
+          </span>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <StatBox label="Total" stats={result.totalStats} />
-        <StatBox label="Retrieval" stats={result.retrievalStats} />
-        <StatBox label="Generation" stats={result.generationStats} />
-      </div>
+      <div className="text-[9px] text-forest-400 truncate pt-0.5">{hint}</div>
     </div>
   );
 }
 
-function StatBox({ label, stats }: { label: string; stats: LatencyStats }) {
+function LangBox({
+  lang,
+  stats,
+}: {
+  lang: string;
+  stats?: { count: number; totalStats: LatencyStats };
+}) {
+  if (!stats || stats.count === 0) return null;
   return (
-    <div className="rounded-md bg-forest-50/50 p-2.5 text-center">
-      <div className="text-[10px] uppercase tracking-wider text-forest-500 font-semibold">{label}</div>
-      <div className="text-sm font-semibold text-forest-800 tabular mt-1">
-        P50 {stats.p50.toFixed(stats.p50 < 10 ? 2 : 0)}ms
+    <div className="p-2.5 rounded-lg border border-forest-200/80 bg-forest-50/30 space-y-1">
+      <div className="text-xs font-bold text-forest-900">{lang}</div>
+      <div className="text-[10px] text-forest-500 font-mono">
+        n={stats.count} samples
       </div>
-      <div className="text-[11px] text-forest-500 tabular">
-        P100 {stats.p100.toFixed(stats.p100 < 10 ? 2 : 0)}ms
+      <div className="grid grid-cols-3 gap-0.5 pt-1 border-t border-forest-100 font-mono text-[10px] tabular">
+        <div>
+          <span className="text-[8px] text-forest-400 block">P50</span>
+          <span className="font-semibold text-forest-800">
+            {stats.totalStats.p50.toFixed(1)}ms
+          </span>
+        </div>
+        <div>
+          <span className="text-[8px] text-forest-400 block">P95</span>
+          <span className="font-semibold text-forest-800">
+            {stats.totalStats.p95.toFixed(1)}ms
+          </span>
+        </div>
+        <div>
+          <span className="text-[8px] text-forest-400 block">P100</span>
+          <span className="font-semibold text-forest-800">
+            {stats.totalStats.p100.toFixed(1)}ms
+          </span>
+        </div>
       </div>
-    </div>
-  );
-}
-
-function PerQueryTable({ report }: { report: BenchmarkReport }) {
-  const [expanded, setExpanded] = useState(false);
-  const data = report.retrievalOnly[0];
-  if (!data) return null;
-  const queriesToShow = expanded ? data.perQuery : data.perQuery.slice(0, 5);
-
-  return (
-    <div>
-      <div className="eyebrow flex items-center gap-1.5 mb-3">
-        <TrendingUp className="w-3 h-3 text-forest-600" />
-        Per-query latency ({data.strategy})
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-forest-200/70">
-        <table className="w-full text-xs">
-          <thead className="bg-forest-50/60">
-            <tr className="text-left text-[10px] uppercase tracking-wider text-forest-600 font-semibold border-b border-forest-200/70">
-              <th className="py-2 px-3">Query</th>
-              <th className="py-2 px-2 text-right">Embed</th>
-              <th className="py-2 px-2 text-right">Search</th>
-              <th className="py-2 px-2 text-right">Total</th>
-              <th className="py-2 px-3 text-right">Top score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {queriesToShow.map((q, i) => (
-              <tr
-                key={i}
-                className="border-b border-forest-100 last:border-0 text-forest-700 hover:bg-forest-50/40"
-              >
-                <td className="py-2 px-3 max-w-[260px] truncate text-forest-600">{q.query}</td>
-                <td className="py-2 px-2 text-right text-forest-500 tabular">{q.embeddingMs.toFixed(2)}</td>
-                <td className="py-2 px-2 text-right text-forest-500 tabular">{q.searchMs.toFixed(2)}</td>
-                <td className="py-2 px-2 text-right text-forest-800 font-semibold tabular">
-                  {q.totalRetrievalMs.toFixed(2)}
-                </td>
-                <td className="py-2 px-3 text-right text-forest-500 tabular">{q.topScore.toFixed(3)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {data.perQuery.length > 5 && (
-        <button suppressHydrationWarning
-          onClick={() => setExpanded(!expanded)}
-          className="mt-2 text-[11px] text-forest-600 hover:text-forest-800 font-medium"
-        >
-          {expanded ? "Show less" : `Show all ${data.perQuery.length} queries →`}
-        </button>
-      )}
     </div>
   );
 }

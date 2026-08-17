@@ -13,11 +13,11 @@ export function Hero({ hasStarted }: HeroProps) {
       <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full border border-goa-gold-300/60 bg-goa-gold-50/80 shadow-xs">
         <span className="w-1.5 h-1.5 rounded-full bg-goa-gold-500 animate-pulse" />
         <span className="text-[10px] font-semibold tracking-[0.15em] uppercase text-goa-gold-900">
-          HH Goa 2026 · Task 2 · Sub-50ms Voice RAG
+          HH Goa 2026 · Task 2 · Voice RAG
         </span>
       </div>
 
-      {/* Main heading - Compact & Executive */}
+      {/* Main heading */}
       <h1 className="mt-2 font-serif text-2xl sm:text-3xl lg:text-4xl text-forest-950 leading-tight tracking-tight">
         Ask. Retrieve.{" "}
         <span className="relative inline-block">
@@ -41,7 +41,7 @@ export function Hero({ hasStarted }: HeroProps) {
 
       {/* Subtitle */}
       <p className="mt-1.5 text-xs sm:text-sm text-forest-700/85 max-w-lg mx-auto leading-normal">
-        Multilingual Voice RAG grounded in MSMARCO-XI with Sarvam Saaras v3 STT.
+        Voice-enabled Retrieval Augmented Generation grounded in the MSMARCO-XI dataset.
       </p>
 
       {/* Status hint */}
@@ -51,7 +51,7 @@ export function Hero({ hasStarted }: HeroProps) {
           {hasStarted ? "Pipeline Active" : "Ready for Query"}
         </span>
         <span className="opacity-40">·</span>
-        <span className="tabular">Fast Grounded Engine (&lt;15ms) + Sarvam Cloud</span>
+        <span className="tabular">Fast Local RAG (&le;50ms SLA Target) · Sarvam STT</span>
       </div>
     </section>
   );

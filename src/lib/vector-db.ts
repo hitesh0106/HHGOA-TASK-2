@@ -164,6 +164,7 @@ export class BM25Index {
 class VectorStore {
   private chunks: ChunkRecord[] = [];
   private embeddings: Float32Array[] = [];
+  private chunkTokenSets: Set<string>[] = [];
   private bm25Index = new BM25Index();
   private strategy = "";
   private loaded = false;
@@ -206,6 +207,16 @@ class VectorStore {
     // Build Multi-Field BM25 inverted index
     this.bm25Index.build(this.chunks);
 
+    // Pre-compute token sets once on startup for sub-millisecond retrieval
+    this.chunkTokenSets = this.chunks.map((c) => {
+      const doc = getDatasetDoc(c.doc_id);
+      const tokens = tokenizeWithStemming(
+        c.text + " " + (doc?.query ?? "") + " " + (doc?.answer ?? ""),
+        true
+      );
+      return new Set(tokens);
+    });
+
     this.loaded = true;
   }
 
@@ -220,6 +231,16 @@ class VectorStore {
 
     // Build Multi-Field BM25 inverted index
     this.bm25Index.build(this.chunks);
+
+    // Pre-compute token sets once on startup
+    this.chunkTokenSets = this.chunks.map((c) => {
+      const doc = getDatasetDoc(c.doc_id);
+      const tokens = tokenizeWithStemming(
+        c.text + " " + (doc?.query ?? "") + " " + (doc?.answer ?? ""),
+        true
+      );
+      return new Set(tokens);
+    });
 
     this.loaded = true;
   }
@@ -282,13 +303,7 @@ class VectorStore {
     const fusedScores = new Float32Array(this.chunks.length);
     for (let i = 0; i < this.chunks.length; i++) {
       const c = this.chunks[i];
-      const doc = getDatasetDoc(c.doc_id);
-
-      const chunkTokens = tokenizeWithStemming(
-        c.text + " " + (doc?.query ?? "") + " " + (doc?.answer ?? ""),
-        true
-      );
-      const chunkTokenSet = new Set(chunkTokens);
+      const chunkTokenSet = this.chunkTokenSets[i] ?? new Set();
 
       let matchedIdf = 0;
       let missingEntityCount = 0;

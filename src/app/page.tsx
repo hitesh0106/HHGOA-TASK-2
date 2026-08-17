@@ -12,12 +12,13 @@ import { RetrievalPanel, type RetrievedChunkData } from "@/components/rag/retrie
 import { AnswerCard, type AnswerState } from "@/components/rag/answer-card";
 import { Sources } from "@/components/rag/sources";
 import { LatencyMetrics } from "@/components/rag/latency-metrics";
-import { ChunkingSelector } from "@/components/rag/chunking-selector";
+import { RuntimeBar } from "@/components/rag/runtime-bar";
 import { GuardrailStatus, type GuardrailDecision } from "@/components/rag/guardrail-status";
 import { SystemStatus } from "@/components/rag/system-status";
 import { EvaluationDashboard } from "@/components/rag/evaluation-dashboard";
 
 import { CHUNKING_STRATEGIES, type ChunkingStrategy } from "@/lib/chunking";
+import type { RagEngine, SttMode } from "@/components/rag/chunking-selector";
 
 // ---------------------------------------------------------------------------
 // Types (mirror backend response shapes)
@@ -117,7 +118,7 @@ export default function Home() {
   const [strategy, setStrategy] = useState<ChunkingStrategy>("overlapping");
   const [topK, setTopK] = useState(5);
   const [useLlmJudge, setUseLlmJudge] = useState(false);
-  const [sttMode, setSttMode] = useState<"transcribe" | "translate">("translate");
+  const [sttMode, setSttMode] = useState<SttMode>("translate");
   const [language, setLanguage] = useState<string>("auto");
   const [engine, setEngine] = useState<RagEngine>("fast");
 
@@ -161,164 +162,160 @@ export default function Home() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
           channelCount: 1,
           sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
         },
       });
-      // Try MIME types in priority order. We prefer plain "audio/webm" (no
-      // codec suffix) because Sarvam does strict string matching and rejects
-      // "audio/webm;codecs=opus". The backend also sanitizes the MIME type,
-      // but recording with a clean MIME from the start avoids edge cases.
-      const mimeCandidates = [
-        "audio/webm",
-        "audio/ogg",
-        "audio/mp4",
-        "audio/webm;codecs=opus",
-      ];
-      const mimeType =
-        mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
+      const mr = new MediaRecorder(stream, { mimeType });
+      mr.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: mimeType || "audio/webm",
-        });
+
+      mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        await transcribeAudio(audioBlob);
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        await transcribeAudio(blob);
       };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
+
+      mediaRecorderRef.current = mr;
+      mr.start(250);
       setRecorderState("listening");
     } catch (e) {
-      setSttError(
-        e instanceof Error
-          ? `Microphone access failed: ${e.message}`
-          : "Microphone access failed. Check browser permissions."
-      );
+      const msg = e instanceof Error ? e.message : String(e);
+      setSttError(`Microphone access error: ${msg}`);
+      setRecorderState("idle");
     }
-  }, [strategy, topK, useLlmJudge, sttMode, engine]);
+  }, []);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && recorderState === "listening") {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
       setRecorderState("transcribing");
     }
-  }, [recorderState]);
+  }, []);
 
-  const transcribeAudio = useCallback(
-    async (audioBlob: Blob) => {
-      setRecorderState("transcribing");
-      try {
-        const formData = new FormData();
-        formData.append("audio", audioBlob, "recording.webm");
-        formData.append("mode", sttMode);
-        if (language && language !== "auto") {
-          formData.append("languageCode", language);
-        }
-        const res = await fetch("/api/stt", { method: "POST", body: formData });
-        const data: SttResponse = await res.json();
-        if (!data.ok) {
-          setSttError(data.error ?? "STT failed");
-          setRecorderState("idle");
-        } else {
-          setTranscript(data.transcript);
-          setSttLatency(data.sttLatencyMs);
-          setSttLang(data.languageCode);
-          if (data.transcript && data.transcript.trim().length > 0) {
-            await runPipeline(data.transcript);
-          } else {
-            setRecorderState("ready");
-          }
-        }
-      } catch (e) {
-        setSttError(e instanceof Error ? e.message : "Network error during STT");
+  // -------------------------------------------------------------------------
+  // STT
+  // -------------------------------------------------------------------------
+  const transcribeAudio = async (blob: Blob) => {
+    setRecorderState("transcribing");
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "recording.webm");
+      form.append("mode", sttMode);
+      if (language && language !== "auto") {
+        form.append("language_code", language);
+      }
+
+      const res = await fetch("/api/stt", { method: "POST", body: form });
+      const data: SttResponse = await res.json();
+
+      if (!data.ok) {
+        setSttError(data.error ?? "STT transcription failed.");
+        setRecorderState("idle");
+        return;
+      }
+
+      setTranscript(data.transcript);
+      setSttLatency(data.sttLatencyMs);
+      setSttLang(data.languageCode);
+
+      if (data.transcript.trim()) {
+        await executeRag(data.transcript.trim());
+      } else {
+        setSttError("No speech detected in recording. Try speaking closer to the microphone.");
         setRecorderState("idle");
       }
-    },
-    [strategy, topK, useLlmJudge, sttMode, language, engine]
-  );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSttError(`STT network error: ${msg}`);
+      setRecorderState("idle");
+    }
+  };
 
   // -------------------------------------------------------------------------
-  // Pipeline
+  // RAG Pipeline
   // -------------------------------------------------------------------------
-  const runPipeline = useCallback(
-    async (query: string) => {
-      setRecorderState("processing");
-      setPipelineError(null);
-      setResult(null);
-      try {
-        const res = await fetch("/api/rag", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query,
-            strategy,
-            engine,
-            topK,
-            useLlmJudge,
-            minScore: 0.05,
-            maxContextTokens: 2048,
-          }),
-        });
-        const data: PipelineResponse & { error?: string } = await res.json();
-        if (!data.ok && !data.blocked) {
-          // Distinguish between real errors and HTTP-level issues
-          const errMsg = data.error || `Pipeline request failed (HTTP ${res.status})`;
-          setPipelineError(errMsg);
-        } else {
-          setResult(data);
-        }
-      } catch (e) {
-        setPipelineError(e instanceof Error ? e.message : "Network error during RAG");
-      } finally {
-        setRecorderState("ready");
+  const executeRag = async (queryText: string) => {
+    setRecorderState("processing");
+    setPipelineError(null);
+    try {
+      const res = await fetch("/api/rag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: queryText,
+          strategy,
+          engine,
+          topK,
+          useLlmJudge,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok && !data.ok) {
+        setPipelineError(data.error ?? "RAG pipeline failed.");
+      } else {
+        setResult(data);
       }
-    },
-    [strategy, topK, useLlmJudge, sttMode, engine]
-  );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPipelineError(`Pipeline network error: ${msg}`);
+    } finally {
+      setRecorderState("ready");
+    }
+  };
+
+  const rerunPipeline = () => {
+    if (transcript.trim()) executeRag(transcript.trim());
+  };
 
   // -------------------------------------------------------------------------
-  // Derived state
+  // Pipeline stage statuses (truthful calculation)
   // -------------------------------------------------------------------------
   const isWorking = recorderState === "transcribing" || recorderState === "processing";
 
-  // Pipeline stage statuses (derived from recorder state + result)
   const stages: Record<PipelineStageId, PipelineStageStatus> = {
-    voice: recorderState === "idle" && !result ? "pending" : "done",
+    voice: recorderState === "listening" ? "active" : recorderState !== "idle" ? "done" : "pending",
     transcript:
       recorderState === "transcribing"
         ? "active"
         : transcript
         ? "done"
+        : recorderState === "listening"
+        ? "pending"
         : "pending",
     retrieve:
       recorderState === "processing"
         ? "active"
         : result
-        ? "done"
+        ? result.blocked && !result.sources?.length
+          ? "blocked"
+          : "done"
         : "pending",
     ground:
-      result && !result.blocked && result.grounded
-        ? "done"
-        : result && (result.blocked || !result.grounded)
-        ? "blocked"
+      result
+        ? result.blocked
+          ? "blocked"
+          : "done"
         : recorderState === "processing"
         ? "active"
         : "pending",
-    answer: result ? "done" : recorderState === "processing" ? "active" : "pending",
+    answer: result ? (result.blocked ? "blocked" : "done") : recorderState === "processing" ? "active" : "pending",
   };
 
   const stageLatencies: Partial<Record<PipelineStageId, number>> = result
     ? {
-        voice: sttLatency ?? undefined,
-        transcript: undefined,
+        voice: undefined,
+        transcript: sttLatency ?? undefined,
         retrieve: result.timings.retrievalMs,
         ground: result.timings.inputGuardrailsMs + result.timings.retrievalGuardrailsMs + result.timings.outputGuardrailsMs,
         answer: result.timings.generationMs,
@@ -369,7 +366,7 @@ export default function Home() {
     <div className="bg-goa-canvas min-h-screen flex flex-col">
       <Navbar active={tab} onNavigate={setTab} systemOnline={systemOnline} />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+      <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
         {tab === "voice" && (
           <VoiceRagTab
             recorderState={recorderState}
@@ -401,52 +398,21 @@ export default function Home() {
             retrievalGuardrail={retrievalGuardrail}
             onStart={startRecording}
             onStop={stopRecording}
-            onRerun={() => transcript && runPipeline(transcript)}
+            onRerun={rerunPipeline}
           />
         )}
 
-        {tab === "evaluation" && (
-          <div className="pt-8">
-            <EvaluationDashboard />
-          </div>
-        )}
+        {tab === "evaluation" && <EvaluationDashboard />}
 
-        {tab === "system" && (
-          <div className="pt-8 max-w-3xl mx-auto">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-goa-gold-300/60 bg-goa-gold-50/80">
-                <span className="w-1 h-1 rounded-full bg-goa-gold-500" />
-                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-goa-gold-800">
-                  System
-                </span>
-              </div>
-              <h1 className="mt-4 font-serif text-3xl text-forest-900">System Status</h1>
-              <p className="mt-2 text-sm text-forest-600 max-w-md mx-auto">
-                Real-time health of the Voice RAG pipeline components.
-              </p>
-            </div>
-            {health && (
-              <SystemStatus
-                sarvamConfigured={health.sarvamApiKeyConfigured}
-                vectorStoresLoaded={health.vectorStores?.length ?? 0}
-                totalVectorStores={4}
-                idfSize={health.idfSize}
-                docCount={health.summary?.doc_count ?? 0}
-                uptime={health.uptime}
-              />
-            )}
-          </div>
-        )}
+        {tab === "system" && <SystemStatus health={health} onRefresh={fetchHealth} />}
       </main>
 
-      <footer className="mt-auto border-t border-forest-200/60 bg-white/60 backdrop-blur-sm py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-[10px] text-forest-500">
-          <div>
-            HH Goa 2026 · Voice RAG · AI Lab
-          </div>
-          <div className="tabular">
-            Sarvam Saaras v3 · Sarvam-105B · MSMARCO-XI
-          </div>
+      <footer className="border-t border-forest-200/60 py-4 bg-white/50 text-center text-xs text-forest-600">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>Hacker House Goa 2026 · Task 2 Voice RAG</span>
+          <span className="text-forest-400">
+            MSMARCO-XI Corpus · Fast Local Synthesizer (&le;50ms SLA) · Sarvam AI
+          </span>
         </div>
       </footer>
     </div>
@@ -472,8 +438,8 @@ interface VoiceRagTabProps {
   useLlmJudge: boolean;
   setUseLlmJudge: (b: boolean) => void;
   loadedStrategies: string[];
-  sttMode: "transcribe" | "translate";
-  setSttMode: (m: "transcribe" | "translate") => void;
+  sttMode: SttMode;
+  setSttMode: (m: SttMode) => void;
   language: string;
   setLanguage: (lang: string) => void;
   engine: RagEngine;
@@ -501,10 +467,6 @@ function VoiceRagTab(props: VoiceRagTabProps) {
     isWorking,
     strategy,
     setStrategy,
-    topK,
-    setTopK,
-    useLlmJudge,
-    setUseLlmJudge,
     loadedStrategies,
     sttMode,
     setSttMode,
@@ -524,10 +486,11 @@ function VoiceRagTab(props: VoiceRagTabProps) {
   } = props;
 
   return (
-    <>
+    <div className="space-y-6">
+      {/* 1. Hero */}
       <Hero hasStarted={recorderState !== "idle" || !!result} />
 
-      {/* Voice recorder — centered & compact */}
+      {/* 2. Central Voice Recorder */}
       <div className="max-w-2xl mx-auto py-2">
         <VoiceRecorder
           state={recorderState}
@@ -539,87 +502,87 @@ function VoiceRagTab(props: VoiceRagTabProps) {
         />
       </div>
 
-      {/* Two-column layout below */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-3">
-        {/* Left column: config + transcript */}
-        <div className="lg:col-span-4 space-y-5">
-          <ChunkingSelector
-            strategy={strategy}
-            onChange={setStrategy}
-            topK={topK}
-            onTopKChange={setTopK}
-            useLlmJudge={useLlmJudge}
-            onUseLlmJudgeChange={setUseLlmJudge}
-            loadedStrategies={loadedStrategies}
-            sttMode={sttMode}
-            onSttModeChange={setSttMode}
-            language={language}
-            onLanguageChange={setLanguage}
-            engine={engine}
-            onEngineChange={setEngine}
+      {/* 3. Compact Runtime Settings Bar */}
+      <RuntimeBar
+        strategy={strategy}
+        onStrategyChange={setStrategy}
+        engine={engine}
+        onEngineChange={setEngine}
+        language={language}
+        onLanguageChange={setLanguage}
+        sttMode={sttMode}
+        onSttModeChange={setSttMode}
+        loadedStrategies={loadedStrategies}
+      />
+
+      {/* 4. Pipeline Execution & Output Cards */}
+      <div className="space-y-5 max-w-4xl mx-auto">
+        {/* Your Question (Transcript) */}
+        {transcript && (
+          <TranscriptCard
+            transcript={transcript}
+            sttLatencyMs={sttLatency}
+            languageCode={sttLang}
+            onRerun={onRerun}
+            isProcessing={isWorking}
           />
+        )}
 
-          {transcript && (
-            <TranscriptCard
-              transcript={transcript}
-              sttLatencyMs={sttLatency}
-              languageCode={sttLang}
-              onRerun={onRerun}
-              isProcessing={isWorking}
-            />
-          )}
-        </div>
+        {/* Pipeline Error if any */}
+        {pipelineError && (
+          <div className="rounded-lg border border-rose-300 bg-rose-50 p-4 text-xs text-rose-700">
+            <strong>Pipeline error:</strong> {pipelineError}
+          </div>
+        )}
 
-        {/* Right column: pipeline + answer + sources */}
-        <div className="lg:col-span-8 space-y-5">
-          <RAGPipeline stages={stages} latencies={stageLatencies} />
+        {/* End-to-End Orchestration Flow */}
+        <RAGPipeline stages={stages} latencies={stageLatencies} />
 
-          {pipelineError && (
-            <div className="rounded-lg border border-rose-300 bg-rose-50 p-4 text-xs text-rose-700">
-              <strong>Pipeline error:</strong> {pipelineError}
-            </div>
-          )}
+        {/* Grounded Answer */}
+        <AnswerCard
+          answer={result?.answer ?? ""}
+          state={answerState}
+          confidence={result?.confidence ?? "refused"}
+          citations={result?.citations ?? []}
+          warnings={result?.blockReasons ?? []}
+        />
 
-          <AnswerCard
-            answer={result?.answer ?? ""}
-            state={answerState}
-            confidence={result?.confidence ?? "refused"}
-            citations={result?.citations ?? []}
-            warnings={result?.blockReasons ?? []}
+        {/* Real-Time Latency Breakdown (2-Phase Architecture) */}
+        <LatencyMetrics
+          sttMs={sttLatency}
+          retrievalMs={result?.timings.retrievalMs ?? null}
+          generationMs={result?.timings.generationMs ?? null}
+          totalMs={result?.timings.totalMs ?? null}
+          engine={engine}
+        />
+
+        {/* Retrieved Knowledge */}
+        {retrievedChunks.length > 0 && (
+          <RetrievalPanel
+            chunks={retrievedChunks}
+            totalScanned={result?.retrievalStats.candidatesScanned}
+            retrievalLatencyMs={result?.timings.retrievalMs}
           />
+        )}
 
-          <LatencyMetrics
-            sttMs={sttLatency}
-            retrievalMs={result?.timings.retrievalMs ?? null}
-            generationMs={result?.timings.generationMs ?? null}
-            totalMs={result?.timings.totalMs ?? null}
+        {/* Cited Sources Only */}
+        {sources.length > 0 && (
+          <Sources
+            sources={sources}
+            contextPreview={result?.contextPreview}
           />
+        )}
 
-          {retrievedChunks.length > 0 && (
-            <RetrievalPanel
-              chunks={retrievedChunks}
-              totalScanned={result?.retrievalStats.candidatesScanned}
-              retrievalLatencyMs={result?.timings.retrievalMs}
-            />
-          )}
-
-          {sources.length > 0 && (
-            <Sources
-              sources={sources}
-              contextPreview={result?.contextPreview}
-            />
-          )}
-
-          {result && (
-            <GuardrailStatus
-              input={result.guardrails.input}
-              output={result.guardrails.output}
-              retrieval={retrievalGuardrail}
-              combined={result.guardrails.combined}
-            />
-          )}
-        </div>
+        {/* Guardrail Verification */}
+        {result && (
+          <GuardrailStatus
+            input={result.guardrails.input}
+            output={result.guardrails.output}
+            retrieval={retrievalGuardrail}
+            combined={result.guardrails.combined}
+          />
+        )}
       </div>
-    </>
+    </div>
   );
 }
