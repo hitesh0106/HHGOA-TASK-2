@@ -144,7 +144,7 @@ export function synthesizeFastGroundedAnswer(
   const queryMatches = queryIndex ? queryIndex.match(query) : [];
   const docMatch = queryMatches.find((m) => m.docId === top.chunk.doc_id);
 
-  if (docMatch && topDoc && docMatch.score >= 0.40 && topDoc.answer) {
+  if (docMatch && topDoc && docMatch.score >= 0.25 && topDoc.answer) {
     let answerText = topDoc.answer.trim();
     if (!/[.!?]$/.test(answerText)) answerText += ".";
     return {
@@ -191,8 +191,9 @@ export function synthesizeFastGroundedAnswer(
       const coverage = targetTokens.length > 0 ? matchCount / targetTokens.length : 0;
       const missingCount = targetTokens.length - matchCount;
 
-      // Strict entity requirement: for queries with 2+ entities, candidate sentence MUST cover at least 70%
-      if (targetTokens.length >= 2 && coverage < 0.70) continue;
+      // Strict entity requirement: for queries with 3+ entities, candidate sentence MUST cover at least 60%
+      if (targetTokens.length >= 3 && coverage < 0.60) continue;
+      if (targetTokens.length === 2 && coverage < 0.50) continue;
       if (targetTokens.length === 1 && coverage < 1.0) continue;
 
       let patternBoost = 1.0;

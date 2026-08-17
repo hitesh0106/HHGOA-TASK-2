@@ -23,32 +23,36 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Voice RAG · HH Goa 2026 · AI Lab",
+  title: "Voice RAG · Hacker House Goa 2026 · Task 2",
   description:
-    "Voice-enabled retrieval-augmented generation, grounded in real knowledge. Hacker House Goa 2026 Task 2 — AI Lab.",
+    "Sub-50ms Voice-Enabled Retrieval-Augmented Generation on MSMARCO-XI with Sarvam AI. Hacker House Goa 2026 Task 2.",
   keywords: [
     "HH Goa 2026",
     "Hacker House Goa",
     "Voice RAG",
     "MSMARCO-XI",
-    "Sarvam",
-    "AI4Bharat",
+    "Sarvam AI",
+    "Saaras v3",
     "Retrieval Augmented Generation",
   ],
   authors: [{ name: "HH Goa 2026" }],
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/logo.svg", type: "image/svg+xml" },
+    ],
+    shortcut: ["/logo.svg"],
+    apple: ["/logo.svg"],
   },
   openGraph: {
-    title: "Voice RAG · HH Goa 2026 · AI Lab",
+    title: "Voice RAG · Hacker House Goa 2026 · Task 2",
     description:
-      "Voice-enabled retrieval-augmented generation, grounded in real knowledge.",
+      "Sub-50ms Voice-Enabled Retrieval-Augmented Generation on MSMARCO-XI with Sarvam AI.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Voice RAG · HH Goa 2026",
-    description: "Voice-enabled retrieval-augmented generation.",
+    title: "Voice RAG · HH Goa 2026 · Task 2",
+    description: "Sub-50ms Voice RAG with Sarvam AI.",
   },
 };
 

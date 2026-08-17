@@ -50,7 +50,7 @@ const UNSAFE_PATTERNS = [
 
 const OFF_TOPIC_PATTERNS = [
   // Medical / legal advice (require licensed professional)
-  /\b(diagnos|prescrib|medical advice|should I take|dosage)\b/i,
+  /\b(blood in stool|stool mean|diagnos|prescrib|medical advice|should I take|dosage)\b/i,
   /\b(legal advice|sue|file (a )?lawsuit|attorney recommendation)\b/i,
   // Pure entertainment / subjective recommendation
   /\b(what's the (best|worst) (movie|song|game|book))\b/i,
@@ -61,6 +61,8 @@ const NON_QUESTION_HINTS = [
   /^\s*hello\b/i,
   /^\s*hey\b/i,
   /^\s*thanks?\b/i,
+  /^\s*(नमस्ते|नमस्कार|प्रणाम|हाय|हेलो)\b/i,
+  /^\s*(নমস্কার|হ্যালো|ধন্যবাদ)\b/i,
 ];
 
 export function checkInputSafety(query: string): GuardrailDecision {

@@ -1,10 +1,25 @@
 "use client";
 
-import { Languages } from "lucide-react";
+import { Languages, Globe } from "lucide-react";
 import { CHUNKING_STRATEGIES, CHUNKING_DESCRIPTIONS, type ChunkingStrategy } from "@/lib/chunking";
 
 export type SttMode = "transcribe" | "translate";
 export type RagEngine = "fast" | "sarvam";
+
+export const SUPPORTED_LANGUAGES = [
+  { code: "auto", name: "Auto Detect (AI)", flag: "🌐" },
+  { code: "en-IN", name: "English (India)", flag: "🇬🇧" },
+  { code: "hi-IN", name: "Hindi (हिन्दी)", flag: "🇮🇳" },
+  { code: "bn-IN", name: "Bengali (বাংলা)", flag: "🇮🇳" },
+  { code: "mr-IN", name: "Marathi (मराठी)", flag: "🇮🇳" },
+  { code: "ta-IN", name: "Tamil (தமிழ்)", flag: "🇮🇳" },
+  { code: "te-IN", name: "Telugu (తెలుగు)", flag: "🇮🇳" },
+  { code: "gu-IN", name: "Gujarati (ગુજરાતી)", flag: "🇮🇳" },
+  { code: "kn-IN", name: "Kannada (ಕನ್ನಡ)", flag: "🇮🇳" },
+  { code: "ml-IN", name: "Malayalam (മലയാളം)", flag: "🇮🇳" },
+  { code: "pa-IN", name: "Punjabi (ਪੰਜਾਬੀ)", flag: "🇮🇳" },
+  { code: "od-IN", name: "Odia (ଓଡ଼ିଆ)", flag: "🇮🇳" },
+];
 
 interface ChunkingSelectorProps {
   strategy: ChunkingStrategy;
@@ -16,6 +31,8 @@ interface ChunkingSelectorProps {
   loadedStrategies: string[];
   sttMode: SttMode;
   onSttModeChange: (m: SttMode) => void;
+  language: string;
+  onLanguageChange: (lang: string) => void;
   engine: RagEngine;
   onEngineChange: (e: RagEngine) => void;
 }
@@ -30,6 +47,8 @@ export function ChunkingSelector({
   loadedStrategies,
   sttMode,
   onSttModeChange,
+  language,
+  onLanguageChange,
   engine,
   onEngineChange,
 }: ChunkingSelectorProps) {
@@ -72,17 +91,42 @@ export function ChunkingSelector({
         </p>
       </div>
 
-      {/* STT mode toggle — translate Indic speech to English for retrieval */}
+      {/* Multilingual Speech & Language Configuration */}
       <div className="mb-4 rounded-lg border border-forest-200/70 bg-forest-50/40 p-3">
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-forest-600" />
+            <span className="text-xs font-semibold text-forest-800">Voice Language</span>
+          </div>
+          <select
+            value={language}
+            onChange={(e) => {
+              const newLang = e.target.value;
+              onLanguageChange(newLang);
+              if (newLang !== "en-IN" && newLang !== "auto" && sttMode === "transcribe") {
+                onSttModeChange("translate");
+              }
+            }}
+            className="text-[11px] font-medium bg-white border border-forest-200 rounded-md px-2 py-1 text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500"
+          >
+            {SUPPORTED_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.flag} {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* STT mode toggle — translate Indic speech to English for retrieval */}
+        <div className="flex items-center justify-between pt-2 border-t border-forest-200/40">
           <div className="flex items-center gap-1.5">
             <Languages className="w-3.5 h-3.5 text-forest-600" />
-            <span className="text-xs font-medium text-forest-800">Speech mode</span>
+            <span className="text-[11px] font-medium text-forest-700">Speech Mode</span>
           </div>
           <div className="flex items-center gap-1 bg-forest-100 rounded-full p-0.5">
             <button suppressHydrationWarning
               onClick={() => onSttModeChange("transcribe")}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-colors ${
+              className={`px-2.5 py-0.5 text-[10px] font-medium rounded-full transition-colors ${
                 sttMode === "transcribe" ? "bg-white text-forest-800 shadow-sm" : "text-forest-600"
               }`}
             >
@@ -90,7 +134,7 @@ export function ChunkingSelector({
             </button>
             <button suppressHydrationWarning
               onClick={() => onSttModeChange("translate")}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-colors ${
+              className={`px-2.5 py-0.5 text-[10px] font-medium rounded-full transition-colors ${
                 sttMode === "translate" ? "bg-white text-forest-800 shadow-sm" : "text-forest-600"
               }`}
             >
@@ -98,10 +142,10 @@ export function ChunkingSelector({
             </button>
           </div>
         </div>
-        <p className="text-[10px] text-forest-500 leading-snug">
-          {sttMode === "transcribe"
-            ? "Keeps speech in its original language. Best for English queries."
-            : "Translates Indic speech to English before retrieval. Use this for Hindi/Marathi/Tamil/etc. — the corpus is English."}
+        <p className="text-[10px] text-forest-500 mt-1.5 leading-snug">
+          {sttMode === "translate"
+            ? "✨ Translates spoken Indic languages (Hindi, Bengali, Tamil, etc.) to English before retrieval for optimal MSMARCO matching."
+            : "Transcribes speech in original language."}
         </p>
       </div>
 

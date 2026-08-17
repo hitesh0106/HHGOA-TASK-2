@@ -25,10 +25,10 @@ export function Navbar({ active, onNavigate, systemOnline }: NavbarProps) {
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-forest-800 tracking-tight">
-              HH Goa 2026
+              Voice RAG
             </div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-forest-500 font-medium">
-              AI Lab
+            <div className="text-[10px] uppercase tracking-[0.15em] text-goa-gold-600 font-medium">
+              HH Goa 2026 · Task 2
             </div>
           </div>
         </div>

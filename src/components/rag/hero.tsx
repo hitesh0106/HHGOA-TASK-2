@@ -8,23 +8,22 @@ interface HeroProps {
 
 export function Hero({ hasStarted }: HeroProps) {
   return (
-    <section className="text-center pt-10 sm:pt-14 pb-8 sm:pb-10 max-w-3xl mx-auto">
+    <section className="text-center pt-5 pb-3 max-w-2xl mx-auto">
       {/* Eyebrow chip */}
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-goa-gold-300/60 bg-goa-gold-50/80">
-        <span className="w-1 h-1 rounded-full bg-goa-gold-500" />
-        <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-goa-gold-800">
-          HH Goa 2026 · AI Lab
+      <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full border border-goa-gold-300/60 bg-goa-gold-50/80 shadow-xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-goa-gold-500 animate-pulse" />
+        <span className="text-[10px] font-semibold tracking-[0.15em] uppercase text-goa-gold-900">
+          HH Goa 2026 · Task 2 · Sub-50ms Voice RAG
         </span>
       </div>
 
-      {/* Main heading */}
-      <h1 className="mt-5 font-serif text-4xl sm:text-5xl lg:text-6xl text-forest-900 leading-[1.05] tracking-tight">
-        Ask. Retrieve.
-        <br />
+      {/* Main heading - Compact & Executive */}
+      <h1 className="mt-2 font-serif text-2xl sm:text-3xl lg:text-4xl text-forest-950 leading-tight tracking-tight">
+        Ask. Retrieve.{" "}
         <span className="relative inline-block">
-          <span className="italic text-forest-700">Understand.</span>
+          <span className="italic text-forest-800">Understand.</span>
           <svg
-            className="absolute -bottom-2 left-0 w-full"
+            className="absolute -bottom-1.5 left-0 w-full"
             viewBox="0 0 200 8"
             preserveAspectRatio="none"
             aria-hidden="true"
@@ -41,19 +40,18 @@ export function Hero({ hasStarted }: HeroProps) {
       </h1>
 
       {/* Subtitle */}
-      <p className="mt-6 text-sm sm:text-base text-forest-700/85 max-w-xl mx-auto leading-relaxed">
-        Voice-enabled retrieval augmented generation, grounded in real knowledge
-        from the MSMARCO-XI dataset by AI4Bharat.
+      <p className="mt-1.5 text-xs sm:text-sm text-forest-700/85 max-w-lg mx-auto leading-normal">
+        Multilingual Voice RAG grounded in MSMARCO-XI with Sarvam Saaras v3 STT.
       </p>
 
       {/* Status hint */}
-      <div className="mt-6 flex items-center justify-center gap-3 text-[11px] text-forest-500">
-        <span className="flex items-center gap-1.5">
-          <WaveformBars className="h-3 text-forest-500" bars={4} active={hasStarted} />
-          {hasStarted ? "Pipeline active" : "Awaiting input"}
+      <div className="mt-2 flex items-center justify-center gap-2.5 text-[10px] text-forest-600 font-medium">
+        <span className="flex items-center gap-1">
+          <WaveformBars className="h-2.5 text-forest-600" bars={4} active={hasStarted} />
+          {hasStarted ? "Pipeline Active" : "Ready for Query"}
         </span>
         <span className="opacity-40">·</span>
-        <span className="tabular">Sarvam Saaras v3 · Sarvam-105B</span>
+        <span className="tabular">Fast Grounded Engine (&lt;15ms) + Sarvam Cloud</span>
       </div>
     </section>
   );

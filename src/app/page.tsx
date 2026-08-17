@@ -117,7 +117,8 @@ export default function Home() {
   const [strategy, setStrategy] = useState<ChunkingStrategy>("overlapping");
   const [topK, setTopK] = useState(5);
   const [useLlmJudge, setUseLlmJudge] = useState(false);
-  const [sttMode, setSttMode] = useState<"transcribe" | "translate">("transcribe");
+  const [sttMode, setSttMode] = useState<"transcribe" | "translate">("translate");
+  const [language, setLanguage] = useState<string>("auto");
   const [engine, setEngine] = useState<RagEngine>("fast");
 
   // Pipeline result
@@ -218,6 +219,9 @@ export default function Home() {
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.webm");
         formData.append("mode", sttMode);
+        if (language && language !== "auto") {
+          formData.append("languageCode", language);
+        }
         const res = await fetch("/api/stt", { method: "POST", body: formData });
         const data: SttResponse = await res.json();
         if (!data.ok) {
@@ -227,7 +231,7 @@ export default function Home() {
           setTranscript(data.transcript);
           setSttLatency(data.sttLatencyMs);
           setSttLang(data.languageCode);
-          if (data.transcript.trim().split(/\s+/).length >= 2) {
+          if (data.transcript && data.transcript.trim().length > 0) {
             await runPipeline(data.transcript);
           } else {
             setRecorderState("ready");
@@ -238,7 +242,7 @@ export default function Home() {
         setRecorderState("idle");
       }
     },
-    [strategy, topK, useLlmJudge, sttMode, engine]
+    [strategy, topK, useLlmJudge, sttMode, language, engine]
   );
 
   // -------------------------------------------------------------------------
@@ -385,6 +389,8 @@ export default function Home() {
             loadedStrategies={loadedStrategies}
             sttMode={sttMode}
             setSttMode={setSttMode}
+            language={language}
+            setLanguage={setLanguage}
             engine={engine}
             setEngine={setEngine}
             stages={stages}
@@ -468,6 +474,8 @@ interface VoiceRagTabProps {
   loadedStrategies: string[];
   sttMode: "transcribe" | "translate";
   setSttMode: (m: "transcribe" | "translate") => void;
+  language: string;
+  setLanguage: (lang: string) => void;
   engine: RagEngine;
   setEngine: (e: RagEngine) => void;
   stages: Record<PipelineStageId, PipelineStageStatus>;
@@ -500,6 +508,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
     loadedStrategies,
     sttMode,
     setSttMode,
+    language,
+    setLanguage,
     engine,
     setEngine,
     stages,
@@ -517,8 +527,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
     <>
       <Hero hasStarted={recorderState !== "idle" || !!result} />
 
-      {/* Voice recorder — centered */}
-      <div className="max-w-2xl mx-auto py-6">
+      {/* Voice recorder — centered & compact */}
+      <div className="max-w-2xl mx-auto py-2">
         <VoiceRecorder
           state={recorderState}
           transcript={transcript}
@@ -530,7 +540,7 @@ function VoiceRagTab(props: VoiceRagTabProps) {
       </div>
 
       {/* Two-column layout below */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-3">
         {/* Left column: config + transcript */}
         <div className="lg:col-span-4 space-y-5">
           <ChunkingSelector
@@ -543,6 +553,8 @@ function VoiceRagTab(props: VoiceRagTabProps) {
             loadedStrategies={loadedStrategies}
             sttMode={sttMode}
             onSttModeChange={setSttMode}
+            language={language}
+            onLanguageChange={setLanguage}
             engine={engine}
             onEngineChange={setEngine}
           />
