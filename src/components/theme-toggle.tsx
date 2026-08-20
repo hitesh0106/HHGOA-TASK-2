@@ -86,6 +86,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       <button
         type="button"
         aria-label="Toggle theme"
+        suppressHydrationWarning
         className="w-8 h-8 rounded-full flex items-center justify-center border border-forest-200/70 bg-forest-50/60 dark:border-forest-800/80 dark:bg-forest-950/60 text-forest-600 dark:text-forest-300 opacity-80"
         disabled
       >
@@ -105,6 +106,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       type="button"
       onClick={handleToggle}
+      suppressHydrationWarning
       aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
       title={isDark ? "Switch to Light Mode (Click for circular transition)" : "Switch to Dark Mode (Click for circular transition)"}
       className={`w-8 h-8 rounded-full flex items-center justify-center border border-forest-200/70 bg-forest-50/60 hover:bg-forest-100/80 dark:border-forest-800/80 dark:bg-forest-950/60 dark:hover:bg-forest-900/80 text-forest-700 dark:text-forest-200 transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest-500 cursor-pointer shadow-xs ${className ?? ""}`}
