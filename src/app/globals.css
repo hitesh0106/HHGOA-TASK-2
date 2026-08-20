@@ -5,10 +5,18 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-secondary: var(--background-secondary);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-subtle: var(--surface-subtle);
   --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -17,17 +25,21 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-accent-muted: var(--accent-muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -73,54 +85,134 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ----------------------------------------------------------------------------
+   LIGHT MODE DESIGN TOKENS (Default)
+   Warm ivory canvas, crisp white surfaces, deep forest green text, warm gold
+---------------------------------------------------------------------------- */
 :root {
   --radius: 0.75rem;
 
-  /* Pure white / very light neutral background */
-  --background: oklch(0.99 0.005 120);
-  --foreground: oklch(0.18 0.03 150);
+  /* Canvas and surfaces */
+  --background: #fbfcfb;
+  --background-secondary: #f3f7f4;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-subtle: #f0f5f1;
 
-  /* White cards */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.03 150);
+  /* Typography & Foreground */
+  --foreground: #0b1d14;
+  --foreground-muted: #356146;
+  --foreground-subtle: #6a9778;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.03 150);
+  /* Cards & Popovers */
+  --card: #ffffff;
+  --card-foreground: #0b1d14;
+  --popover: #ffffff;
+  --popover-foreground: #0b1d14;
 
-  /* Deep forest green primary */
-  --primary: oklch(0.28 0.05 155);
-  --primary-foreground: oklch(0.99 0.005 120);
+  /* Primary action - Forest Green */
+  --primary: #1f3a2c;
+  --primary-foreground: #f3f7f3;
 
-  /* Soft forest-tinted secondary */
-  --secondary: oklch(0.96 0.01 140);
-  --secondary-foreground: oklch(0.28 0.05 155);
+  /* Secondary & Muted */
+  --secondary: #f0f5f1;
+  --secondary-foreground: #1f3a2c;
+  --muted: #f0f5f1;
+  --muted-foreground: #477a58;
 
-  --muted: oklch(0.97 0.005 130);
-  --muted-foreground: oklch(0.45 0.02 150);
+  /* Goa Gold Accent */
+  --accent: #e7b13a;
+  --accent-foreground: #0b1d14;
+  --accent-muted: #fdf9ec;
 
-  /* Goa gold accent */
-  --accent: oklch(0.88 0.13 80);
-  --accent-foreground: oklch(0.28 0.05 155);
+  /* Feedback & borders */
+  --destructive: #b91c1c;
+  --border: rgba(53, 97, 70, 0.18);
+  --border-subtle: rgba(53, 97, 70, 0.10);
+  --input: #e2ece4;
+  --ring: #356146;
+  --shadow-color: rgba(11, 29, 20, 0.12);
 
-  --destructive: oklch(0.55 0.22 28);
-  --border: oklch(0.88 0.01 140);
-  --input: oklch(0.92 0.008 140);
-  --ring: oklch(0.45 0.06 155);
+  /* Charts */
+  --chart-1: #356146;
+  --chart-2: #e7b13a;
+  --chart-3: #d97336;
+  --chart-4: #477a58;
+  --chart-5: #1f3a2c;
 
-  --chart-1: oklch(0.45 0.06 155);
-  --chart-2: oklch(0.78 0.13 80);
-  --chart-3: oklch(0.65 0.18 45);
-  --chart-4: oklch(0.55 0.10 160);
-  --chart-5: oklch(0.40 0.04 155);
+  /* Sidebar */
+  --sidebar: #fbfcfb;
+  --sidebar-foreground: #0b1d14;
+  --sidebar-primary: #1f3a2c;
+  --sidebar-primary-foreground: #f3f7f3;
+  --sidebar-accent: #f0f5f1;
+  --sidebar-accent-foreground: #1f3a2c;
+  --sidebar-border: rgba(53, 97, 70, 0.18);
+  --sidebar-ring: #356146;
+}
 
-  --sidebar: oklch(0.99 0.005 120);
-  --sidebar-foreground: oklch(0.18 0.03 150);
-  --sidebar-primary: oklch(0.28 0.05 155);
-  --sidebar-primary-foreground: oklch(0.99 0.005 120);
-  --sidebar-accent: oklch(0.96 0.01 140);
-  --sidebar-accent-foreground: oklch(0.28 0.05 155);
-  --sidebar-border: oklch(0.88 0.01 140);
-  --sidebar-ring: oklch(0.45 0.06 155);
+/* ----------------------------------------------------------------------------
+   DARK MODE DESIGN TOKENS (.dark)
+   Deep charcoal-forest night, elevated dark emerald surfaces, soft off-white text
+---------------------------------------------------------------------------- */
+.dark {
+  /* Deep Charcoal-Forest Green Canvas */
+  --background: #09140f;
+  --background-secondary: #0d1a14;
+  --surface: #11231c;
+  --surface-elevated: #152b22;
+  --surface-subtle: #0c1813;
+
+  /* Typography & Foreground */
+  --foreground: #eef5f1;
+  --foreground-muted: #9cb8ad;
+  --foreground-subtle: #6f8f82;
+
+  /* Cards & Popovers */
+  --card: #11231c;
+  --card-foreground: #eef5f1;
+  --popover: #142820;
+  --popover-foreground: #eef5f1;
+
+  /* Primary action - Emerald Glow */
+  --primary: #52b788;
+  --primary-foreground: #09140f;
+
+  /* Secondary & Muted */
+  --secondary: #162c23;
+  --secondary-foreground: #eef5f1;
+  --muted: #152b22;
+  --muted-foreground: #8faea2;
+
+  /* Goa Gold Accent (Adjusted for dark contrast) */
+  --accent: #f3c35c;
+  --accent-foreground: #09140f;
+  --accent-muted: #292211;
+
+  /* Feedback & borders */
+  --destructive: #f87171;
+  --border: #1e382d;
+  --border-subtle: #162a22;
+  --input: #1e382d;
+  --ring: #52b788;
+  --shadow-color: rgba(0, 0, 0, 0.6);
+
+  /* Charts */
+  --chart-1: #52b788;
+  --chart-2: #f3c35c;
+  --chart-3: #e88a4d;
+  --chart-4: #6a9778;
+  --chart-5: #9bbca4;
+
+  /* Sidebar */
+  --sidebar: #09140f;
+  --sidebar-foreground: #eef5f1;
+  --sidebar-primary: #52b788;
+  --sidebar-primary-foreground: #09140f;
+  --sidebar-accent: #162c23;
+  --sidebar-accent-foreground: #eef5f1;
+  --sidebar-border: #1e382d;
+  --sidebar-ring: #52b788;
 }
 
 @layer base {
@@ -130,21 +222,30 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
+    transition: background-color 200ms ease, color 200ms ease;
   }
 }
 
 /* ----------------------------------------------------------------------------
-   HH Goa 2026 design utilities
+   HH Goa 2026 design utilities (Theme-Aware)
 ---------------------------------------------------------------------------- */
 
 /* Subtle tropical background — palm/foliage silhouettes layered with sun glow */
 .bg-goa-canvas {
-  background-color: #fbfcfb;
+  background-color: var(--background);
   background-image:
-    radial-gradient(ellipse 800px 400px at 12% 8%, rgba(231, 177, 58, 0.10) 0%, transparent 60%),
-    radial-gradient(ellipse 700px 500px at 88% 92%, rgba(53, 97, 70, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 500px 300px at 95% 15%, rgba(217, 115, 54, 0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 800px 400px at 12% 8%, rgba(231, 177, 58, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 500px at 88% 92%, rgba(53, 97, 70, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 300px at 95% 15%, rgba(217, 115, 54, 0.05) 0%, transparent 60%);
   position: relative;
+  transition: background-color 200ms ease;
+}
+
+.dark .bg-goa-canvas {
+  background-image:
+    radial-gradient(ellipse 800px 400px at 12% 8%, rgba(243, 195, 92, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 500px at 88% 92%, rgba(82, 183, 136, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 300px at 95% 15%, rgba(232, 138, 77, 0.05) 0%, transparent 60%);
 }
 
 .bg-goa-canvas::before {
@@ -153,12 +254,17 @@
   inset: 0;
   pointer-events: none;
   background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600' viewBox='0 0 600 600'><g fill='none' stroke='%23356146' stroke-width='1' stroke-linecap='round' opacity='0.07'><path d='M540 80 Q580 180 540 280'/><path d='M520 100 Q490 200 530 300'/><path d='M560 90 Q590 200 545 290'/><path d='M530 110 Q500 200 520 290'/></g></svg>");
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600' viewBox='0 0 600 600'><g fill='none' stroke='%23356146' stroke-width='1' stroke-linecap='round' opacity='0.06'><path d='M540 80 Q580 180 540 280'/><path d='M520 100 Q490 200 530 300'/><path d='M560 90 Q590 200 545 290'/><path d='M530 110 Q500 200 520 290'/></g></svg>");
   background-repeat: no-repeat;
   background-position: top right;
   background-size: 480px auto;
   opacity: 0.6;
   z-index: 0;
+}
+
+.dark .bg-goa-canvas::before {
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600' viewBox='0 0 600 600'><g fill='none' stroke='%2352b788' stroke-width='1' stroke-linecap='round' opacity='0.04'><path d='M540 80 Q580 180 540 280'/><path d='M520 100 Q490 200 530 300'/><path d='M560 90 Q590 200 545 290'/><path d='M530 110 Q500 200 520 290'/></g></svg>");
 }
 
 .bg-goa-canvas > * {
@@ -171,6 +277,9 @@
   background-image: radial-gradient(circle, rgba(53, 97, 70, 0.08) 1px, transparent 1px);
   background-size: 24px 24px;
 }
+.dark .bg-dot-grid {
+  background-image: radial-gradient(circle, rgba(82, 183, 136, 0.08) 1px, transparent 1px);
+}
 
 /* Card variants */
 .card-forest {
@@ -178,29 +287,45 @@
   color: #f3f7f3;
   border: 1px solid var(--color-forest-950);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 4px 24px -12px rgba(11, 29, 20, 0.6);
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.dark .card-forest {
+  background-color: #0c1813;
+  color: #eef5f1;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 4px 24px -12px rgba(0, 0, 0, 0.7);
 }
 
 .card-paper {
-  background-color: #ffffff;
-  border: 1px solid rgba(53, 97, 70, 0.18);
-  box-shadow: 0 1px 2px rgba(11, 29, 20, 0.04), 0 4px 24px -16px rgba(11, 29, 20, 0.18);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(11, 29, 20, 0.04), 0 4px 24px -16px var(--shadow-color);
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 }
 
 .card-paper-accent {
-  background-color: #ffffff;
+  background-color: var(--surface);
   border: 1px solid rgba(231, 177, 58, 0.45);
   box-shadow: 0 1px 2px rgba(11, 29, 20, 0.04), 0 4px 24px -16px rgba(217, 148, 32, 0.25);
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.dark .card-paper-accent {
+  background-color: var(--surface-elevated);
+  border: 1px solid rgba(243, 195, 92, 0.35);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 24px -16px rgba(243, 195, 92, 0.15);
 }
 
 /* Subtle gold underline accent */
 .gold-rule {
-  background: linear-gradient(90deg, transparent 0%, var(--color-goa-gold-400) 20%, var(--color-goa-gold-400) 80%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 20%, var(--accent) 80%, transparent 100%);
   height: 1px;
 }
 
 /* Forest divider */
 .forest-rule {
-  background: linear-gradient(90deg, transparent 0%, var(--color-forest-300) 20%, var(--color-forest-300) 80%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--border) 20%, var(--border) 80%, transparent 100%);
   height: 1px;
 }
 
@@ -216,14 +341,74 @@
   font-variant-numeric: tabular-nums;
   border: 1px solid transparent;
   white-space: nowrap;
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
 }
 
-.chip-forest { background: rgba(53, 97, 70, 0.08); color: var(--color-forest-700); border-color: rgba(53, 97, 70, 0.18); }
-.chip-gold { background: rgba(231, 177, 58, 0.12); color: var(--color-goa-gold-800); border-color: rgba(231, 177, 58, 0.35); }
-.chip-orange { background: rgba(217, 115, 54, 0.10); color: var(--color-goa-orange-600); border-color: rgba(217, 115, 54, 0.30); }
-.chip-rose { background: rgba(220, 80, 80, 0.10); color: #b03838; border-color: rgba(220, 80, 80, 0.30); }
-.chip-emerald { background: rgba(71, 122, 88, 0.10); color: var(--color-forest-600); border-color: rgba(71, 122, 88, 0.30); }
-.chip-muted { background: rgba(80, 90, 80, 0.06); color: var(--muted-foreground); border-color: rgba(80, 90, 80, 0.12); }
+.chip-forest {
+  background: rgba(53, 97, 70, 0.08);
+  color: var(--color-forest-700);
+  border-color: rgba(53, 97, 70, 0.18);
+}
+.dark .chip-forest {
+  background: rgba(82, 183, 136, 0.14);
+  color: #a3d9bc;
+  border-color: rgba(82, 183, 136, 0.28);
+}
+
+.chip-gold {
+  background: rgba(231, 177, 58, 0.12);
+  color: var(--color-goa-gold-800);
+  border-color: rgba(231, 177, 58, 0.35);
+}
+.dark .chip-gold {
+  background: rgba(243, 195, 92, 0.15);
+  color: #f8d57e;
+  border-color: rgba(243, 195, 92, 0.30);
+}
+
+.chip-orange {
+  background: rgba(217, 115, 54, 0.10);
+  color: var(--color-goa-orange-600);
+  border-color: rgba(217, 115, 54, 0.30);
+}
+.dark .chip-orange {
+  background: rgba(232, 138, 77, 0.16);
+  color: #f7a97b;
+  border-color: rgba(232, 138, 77, 0.32);
+}
+
+.chip-rose {
+  background: rgba(220, 80, 80, 0.10);
+  color: #b03838;
+  border-color: rgba(220, 80, 80, 0.30);
+}
+.dark .chip-rose {
+  background: rgba(244, 63, 94, 0.16);
+  color: #fda4af;
+  border-color: rgba(244, 63, 94, 0.32);
+}
+
+.chip-emerald {
+  background: rgba(71, 122, 88, 0.10);
+  color: var(--color-forest-600);
+  border-color: rgba(71, 122, 88, 0.30);
+}
+.dark .chip-emerald {
+  background: rgba(82, 183, 136, 0.16);
+  color: #6ee7b7;
+  border-color: rgba(82, 183, 136, 0.32);
+}
+
+.chip-muted {
+  background: rgba(80, 90, 80, 0.06);
+  color: var(--muted-foreground);
+  border-color: rgba(80, 90, 80, 0.12);
+}
+.dark .chip-muted {
+  background: rgba(156, 184, 173, 0.10);
+  color: var(--foreground-muted);
+  border-color: rgba(156, 184, 173, 0.20);
+}
 
 /* Status dot — used in header / system status */
 .status-dot {
@@ -233,9 +418,9 @@
   display: inline-block;
   position: relative;
 }
-.status-dot.online { background: var(--color-forest-500); box-shadow: 0 0 0 3px rgba(71, 122, 88, 0.18); }
-.status-dot.warn { background: var(--color-goa-gold-500); box-shadow: 0 0 0 3px rgba(231, 177, 58, 0.22); }
-.status-dot.offline { background: #c04040; box-shadow: 0 0 0 3px rgba(192, 64, 64, 0.20); }
+.status-dot.online { background: #52b788; box-shadow: 0 0 0 3px rgba(82, 183, 136, 0.22); }
+.status-dot.warn { background: #f3c35c; box-shadow: 0 0 0 3px rgba(243, 195, 92, 0.25); }
+.status-dot.offline { background: #f43f5e; box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.22); }
 .status-dot.idle { background: var(--muted-foreground); }
 
 .status-dot.online::after {
@@ -243,7 +428,7 @@
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 1px solid var(--color-forest-500);
+  border: 1px solid #52b788;
   animation: pulse-ring 2.4s ease-out infinite;
 }
 
@@ -274,7 +459,7 @@
   100% { transform: scale(2.2); opacity: 0; }
 }
 
-/* Live waveform bars (CSS-only, no JS state needed) */
+/* Live waveform bars */
 .wave-bars {
   display: flex;
   align-items: center;
@@ -306,9 +491,9 @@
   50% { transform: scaleY(1); }
 }
 
-/* Pipeline flow line — animated dashes for "data flowing" */
+/* Pipeline flow line */
 .flow-line {
-  background-image: linear-gradient(90deg, var(--color-forest-400) 50%, transparent 50%);
+  background-image: linear-gradient(90deg, var(--border) 50%, transparent 50%);
   background-size: 8px 1px;
   background-repeat: repeat-x;
   background-position: center;
@@ -346,7 +531,7 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-weight: 600;
-  color: var(--color-forest-600);
+  color: var(--foreground-muted);
 }
 
 .eyebrow-gold {
@@ -354,7 +539,7 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-weight: 600;
-  color: var(--color-goa-gold-700);
+  color: var(--accent);
 }
 
 /* Hover lift utility */
@@ -363,36 +548,58 @@
 }
 .hover-lift:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 28px -16px rgba(11, 29, 20, 0.30);
+  box-shadow: 0 6px 28px -16px var(--shadow-color);
 }
 
-/* Subtle inner ring for primary buttons */
+/* Buttons */
 .btn-forest {
   background: var(--color-forest-700);
   color: #f3f7f3;
   border: 1px solid var(--color-forest-800);
   box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 4px 14px -8px rgba(11, 29, 20, 0.55);
+  transition: background-color 150ms ease, opacity 150ms ease;
 }
 .btn-forest:hover:not(:disabled) { background: var(--color-forest-800); }
 .btn-forest:disabled { opacity: 0.55; cursor: not-allowed; }
 
+.dark .btn-forest {
+  background: #1e382d;
+  color: #eef5f1;
+  border: 1px solid #2d5646;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 14px -8px rgba(0, 0, 0, 0.7);
+}
+.dark .btn-forest:hover:not(:disabled) { background: #284a3c; }
+
 .btn-gold {
   background: var(--color-goa-gold-400);
-  color: var(--color-forest-900);
+  color: var(--color-forest-950);
   border: 1px solid var(--color-goa-gold-500);
   box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 4px 14px -8px rgba(217, 148, 32, 0.55);
+  transition: background-color 150ms ease, opacity 150ms ease;
 }
 .btn-gold:hover:not(:disabled) { background: var(--color-goa-gold-500); }
 .btn-gold:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* Custom scrollbar (subtle) */
+.dark .btn-gold {
+  background: #f3c35c;
+  color: #09140f;
+  border: 1px solid #f8d57e;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.20) inset, 0 4px 14px -8px rgba(243, 195, 92, 0.4);
+}
+.dark .btn-gold:hover:not(:disabled) { background: #f8d57e; }
+
+/* Custom scrollbar */
 .scroll-area-custom::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll-area-custom::-webkit-scrollbar-track { background: transparent; }
 .scroll-area-custom::-webkit-scrollbar-thumb {
   background: rgba(53, 97, 70, 0.18);
   border-radius: 999px;
 }
+.dark .scroll-area-custom::-webkit-scrollbar-thumb {
+  background: rgba(156, 184, 173, 0.22);
+}
 .scroll-area-custom::-webkit-scrollbar-thumb:hover { background: rgba(53, 97, 70, 0.32); }
+.dark .scroll-area-custom::-webkit-scrollbar-thumb:hover { background: rgba(156, 184, 173, 0.38); }
 
 /* Range slider — brand-styled */
 input[type="range"].brand-range {
@@ -404,7 +611,7 @@ input[type="range"].brand-range {
 }
 input[type="range"].brand-range::-webkit-slider-runnable-track {
   height: 4px;
-  background: rgba(53, 97, 70, 0.18);
+  background: var(--border);
   border-radius: 999px;
 }
 input[type="range"].brand-range::-webkit-slider-thumb {
@@ -414,20 +621,61 @@ input[type="range"].brand-range::-webkit-slider-thumb {
   height: 16px;
   margin-top: -6px;
   border-radius: 50%;
-  background: var(--color-forest-700);
-  border: 2px solid #ffffff;
-  box-shadow: 0 1px 4px rgba(11, 29, 20, 0.4);
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px var(--shadow-color);
 }
 input[type="range"].brand-range::-moz-range-track {
   height: 4px;
-  background: rgba(53, 97, 70, 0.18);
+  background: var(--border);
   border-radius: 999px;
 }
 input[type="range"].brand-range::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--color-forest-700);
-  border: 2px solid #ffffff;
-  box-shadow: 0 1px 4px rgba(11, 29, 20, 0.4);
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px var(--shadow-color);
 }
+
+/* ----------------------------------------------------------------------------
+   CIRCULAR VIEW TRANSITION (Direct 1-Click Theme Switch Ripple)
+---------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 99999;
+}
+
+/* ----------------------------------------------------------------------------
+   FIXED VIEWPORT APP SHELL (ChatGPT-style Zero Window Scroll)
+---------------------------------------------------------------------------- */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ----------------------------------------------------------------------------
+   PORTAL AMBIENT GLOW (CSS-driven for 100% Hydration Match)
+---------------------------------------------------------------------------- */
+.portal-ambient-glow {
+  background: radial-gradient(ellipse 65% 55% at 50% 50%, rgba(53, 97, 70, 0.12) 0%, rgba(217, 148, 32, 0.08) 45%, transparent 70%);
+}
+
+.dark .portal-ambient-glow {
+  background: radial-gradient(ellipse 65% 55% at 50% 50%, rgba(31, 58, 44, 0.45) 0%, rgba(243, 195, 92, 0.12) 40%, transparent 72%);
+}
+
+

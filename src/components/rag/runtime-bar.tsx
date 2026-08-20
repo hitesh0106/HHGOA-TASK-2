@@ -32,19 +32,19 @@ export function RuntimeBar({
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
         {/* Strategy selector */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-forest-700 font-semibold">
-            <Layers className="w-3.5 h-3.5 text-forest-600" />
+          <div className="flex items-center gap-1 text-forest-700 dark:text-forest-300 font-semibold">
+            <Layers className="w-3.5 h-3.5 text-forest-600 dark:text-forest-400" />
             <span className="text-[11px] uppercase tracking-wider">Strategy:</span>
           </div>
           <select
             value={strategy}
             onChange={(e) => onStrategyChange(e.target.value as ChunkingStrategy)}
-            className="text-[11px] font-medium bg-white border border-forest-200 rounded-md px-2 py-1 text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500 capitalize"
+            className="text-[11px] font-medium bg-white dark:bg-[#11231c] border border-forest-200 dark:border-forest-800 rounded-md px-2 py-1 text-forest-800 dark:text-forest-100 focus:outline-none focus:ring-1 focus:ring-forest-500 capitalize"
           >
             {CHUNKING_STRATEGIES.map((s) => {
               const loaded = loadedStrategies.includes(s);
               return (
-                <option key={s} value={s} disabled={!loaded}>
+                <option key={s} value={s} disabled={!loaded} className="bg-white dark:bg-[#11231c] text-forest-900 dark:text-forest-100">
                   {CHUNKING_DESCRIPTIONS[s].name} {!loaded ? "(not loaded)" : ""}
                 </option>
               );
@@ -54,18 +54,18 @@ export function RuntimeBar({
 
         {/* Engine selector */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-forest-700 font-semibold">
-            <Cpu className="w-3.5 h-3.5 text-forest-600" />
+          <div className="flex items-center gap-1 text-forest-700 dark:text-forest-300 font-semibold">
+            <Cpu className="w-3.5 h-3.5 text-forest-600 dark:text-forest-400" />
             <span className="text-[11px] uppercase tracking-wider">Engine:</span>
           </div>
-          <div className="flex items-center gap-0.5 bg-forest-100/70 rounded-full p-0.5">
+          <div className="flex items-center gap-0.5 bg-forest-100/70 dark:bg-forest-950/60 rounded-full p-0.5 border border-forest-200/50 dark:border-forest-800/50">
             <button
               suppressHydrationWarning
               onClick={() => onEngineChange("fast")}
-              className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full transition-colors ${
+              className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full transition-colors cursor-pointer ${
                 engine === "fast"
-                  ? "bg-forest-800 text-white shadow-xs"
-                  : "text-forest-600 hover:text-forest-800"
+                  ? "bg-forest-800 dark:bg-forest-600 text-white shadow-xs"
+                  : "text-forest-600 dark:text-forest-400 hover:text-forest-800 dark:hover:text-forest-200"
               }`}
               title="Fast Local Grounded Synthesizer (Sub-millisecond claim extractor)"
             >
@@ -74,10 +74,10 @@ export function RuntimeBar({
             <button
               suppressHydrationWarning
               onClick={() => onEngineChange("sarvam")}
-              className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full transition-colors ${
+              className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full transition-colors cursor-pointer ${
                 engine === "sarvam"
-                  ? "bg-forest-800 text-white shadow-xs"
-                  : "text-forest-600 hover:text-forest-800"
+                  ? "bg-forest-800 dark:bg-forest-600 text-white shadow-xs"
+                  : "text-forest-600 dark:text-forest-400 hover:text-forest-800 dark:hover:text-forest-200"
               }`}
               title="Sarvam AI Cloud LLM Generative Mode (~950ms)"
             >
@@ -88,8 +88,8 @@ export function RuntimeBar({
 
         {/* Speech Language selector */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-forest-700 font-semibold">
-            <Globe className="w-3.5 h-3.5 text-forest-600" />
+          <div className="flex items-center gap-1 text-forest-700 dark:text-forest-300 font-semibold">
+            <Globe className="w-3.5 h-3.5 text-forest-600 dark:text-forest-400" />
             <span className="text-[11px] uppercase tracking-wider">Voice:</span>
           </div>
           <select
@@ -101,10 +101,10 @@ export function RuntimeBar({
                 onSttModeChange("translate");
               }
             }}
-            className="text-[11px] font-medium bg-white border border-forest-200 rounded-md px-2 py-1 text-forest-800 focus:outline-none focus:ring-1 focus:ring-forest-500"
+            className="text-[11px] font-medium bg-white dark:bg-[#11231c] border border-forest-200 dark:border-forest-800 rounded-md px-2 py-1 text-forest-800 dark:text-forest-100 focus:outline-none focus:ring-1 focus:ring-forest-500"
           >
             {SUPPORTED_LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
+              <option key={l.code} value={l.code} className="bg-white dark:bg-[#11231c] text-forest-900 dark:text-forest-100">
                 {l.flag} {l.name}
               </option>
             ))}

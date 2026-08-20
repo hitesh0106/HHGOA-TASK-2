@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Fraunces, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const sans = Inter({
   variable: "--font-sans",
@@ -64,10 +65,18 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${sans.variable} ${serif.variable} ${mono.variable} antialiased bg-background text-foreground`}
+        className={`${sans.variable} ${serif.variable} ${mono.variable} antialiased bg-background text-foreground min-h-screen`}
       >
-        {children}
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange={false}
+          storageKey="hhgoa-theme"
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

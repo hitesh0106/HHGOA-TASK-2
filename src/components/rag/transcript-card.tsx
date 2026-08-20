@@ -39,19 +39,19 @@ export function TranscriptCard({
         </div>
       </div>
 
-      <p className="font-serif text-lg sm:text-xl text-forest-900 leading-snug">
+      <p className="font-serif text-lg sm:text-xl text-forest-900 dark:text-forest-50 leading-snug">
         “{transcript}”
       </p>
 
-      <div className="mt-4 pt-4 border-t border-forest-100 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[11px] text-forest-500">
+      <div className="mt-4 pt-4 border-t border-forest-100 dark:border-forest-800/60 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-[11px] text-forest-500 dark:text-forest-400">
           <Mic className="w-3 h-3" />
           <span>Sarvam Saaras v3</span>
         </div>
         <button suppressHydrationWarning
           onClick={onRerun}
           disabled={isProcessing}
-          className="flex items-center gap-1.5 text-[11px] font-medium text-forest-600 hover:text-forest-800 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1.5 text-[11px] font-medium text-forest-600 dark:text-forest-300 hover:text-forest-800 dark:hover:text-forest-100 disabled:opacity-50 transition-colors cursor-pointer"
         >
           <RotateCcw className="w-3 h-3" />
           Re-run pipeline

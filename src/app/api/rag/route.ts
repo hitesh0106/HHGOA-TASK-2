@@ -63,11 +63,13 @@ export async function POST(req: NextRequest) {
     }
 
     const engine = body.engine === "sarvam" ? "sarvam" : "fast";
+    const language = typeof body.language === "string" ? body.language : undefined;
 
     const result = await runPipeline({
       query,
       strategy,
       engine,
+      language,
       topK: body.topK,
       minScore: body.minScore,
       maxContextTokens: body.maxContextTokens,

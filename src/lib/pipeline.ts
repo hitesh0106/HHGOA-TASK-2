@@ -4,14 +4,15 @@
  *
  * Orchestrates the full Voice RAG flow:
  *
- *   query (already STT-transcribed)
+ *   query (already STT-transcribed or typed)
  *     → input guardrails (off-topic, unsafe)
+ *     → language detection (query language)
  *     → retrieval (query embedding → vector search → top-K)
  *     → retrieval guardrails (sufficient context?)
- *     → LLM harness (grounded answer generation)
+ *     → LLM harness (grounded multilingual answer generation)
  *     → hallucination guardrails (LLM judge + lexical overlap)
  *     → unsupported-answer guardrails (refusal validation)
- *     → final response with full latency breakdown
+ *     → final response with full latency breakdown & language metadata
  *
  * Every stage is instrumented. If any guardrail returns 'block', the pipeline
  * short-circuits and returns the block reason instead of calling the LLM.
@@ -29,6 +30,7 @@ import {
   type GuardrailDecision,
 } from "./guardrails";
 import { runHarness, type HarnessOutput } from "./llm/harness";
+import { detectQueryLanguage, translateGroundedAnswer } from "./multilingual";
 
 // ---------------------------------------------------------------------------
 // Pipeline input / output
@@ -37,11 +39,11 @@ export interface PipelineRequest {
   query: string;
   strategy: string;
   engine?: "fast" | "sarvam"; // default "fast"
+  language?: string; // Hint language code (e.g. "hi", "bn", "en", "auto")
   topK?: number;
   minScore?: number;
   maxContextTokens?: number;
   useLlmJudge?: boolean; // default false (lexical check is faster)
-  /** Skip STT (already transcribed) - this is the typical path */
   skipStt?: boolean;
 }
 
@@ -62,6 +64,8 @@ export interface PipelineResponse {
   confidence: HarnessOutput["confidence"];
   grounded: boolean;
   citations: number[];
+  detectedLanguage: string;
+  languageName: string;
   sources: RetrievalResult["scoredChunks"];
   contextPreview: string;
   contextTokenCount: number;
@@ -92,6 +96,8 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
   const strategy = req.strategy;
   const engine = req.engine ?? "fast";
 
+  const detected = detectQueryLanguage(query, req.language);
+
   // -----------------------------------------------------------------------
   // Stage 1: input guardrails
   // -----------------------------------------------------------------------
@@ -107,6 +113,8 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
       query,
       strategy,
       engine,
+      detectedLanguage: detected.code,
+      languageName: detected.name,
       blockReasons: inputVerdict.reasons,
       inputGuardrails,
       inputGuardrailsMs,
@@ -131,6 +139,9 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
     return buildBlockedResponse({
       query,
       strategy,
+      engine,
+      detectedLanguage: detected.code,
+      languageName: detected.name,
       blockReasons: [`[retrieval] ${msg}`],
       inputGuardrails,
       inputGuardrailsMs,
@@ -151,6 +162,9 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
     return buildBlockedResponse({
       query,
       strategy,
+      engine,
+      detectedLanguage: detected.code,
+      languageName: detected.name,
       blockReasons: [retrievalGuardrail.reason],
       inputGuardrails,
       inputGuardrailsMs,
@@ -163,7 +177,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
   }
 
   // -----------------------------------------------------------------------
-  // Stage 4: LLM harness
+  // Stage 4: LLM harness with multilingual grounding
   // -----------------------------------------------------------------------
   const harness = await runHarness({
     query,
@@ -171,6 +185,7 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
     contextChunks: retrieval.scoredChunks,
     strategy,
     engine,
+    language: req.language,
     temperature: 0.2,
     maxTokens: 512,
     timeoutMs: 12_000,
@@ -184,9 +199,9 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
   const tOutG0 = performance.now();
   const outputDecisions: GuardrailDecision[] = [];
 
-  // Always run lexical hallucination check (fast, <1ms)
+  // Lexical hallucination check
   outputDecisions.push(
-    checkHallucinationLexical(query, retrieval.context, harness.answer, { minOverlap: 0.4 })
+    checkHallucinationLexical(query, retrieval.context, harness.answer, { minOverlap: 0.25 })
   );
 
   // Optionally run LLM judge (slower, ~1-3s)
@@ -215,9 +230,13 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
   const blocked = outputVerdict.block;
   const ok = !blocked;
 
-  // If output guardrails block, override the answer with a refusal
+  const langCode = harness.detectedLanguage ?? detected.code;
+  const langName = harness.languageName ?? detected.name;
+
+  // If output guardrails block, override the answer with a refusal in detected language
+  const refusalEn = "I cannot provide this answer because it failed grounding validation.";
   const finalAnswer = blocked
-    ? "I cannot provide this answer because it failed grounding validation."
+    ? translateGroundedAnswer(refusalEn, undefined, langCode)
     : harness.answer;
 
   return {
@@ -228,6 +247,8 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
     confidence: blocked ? "refused" : harness.confidence,
     grounded: blocked ? false : harness.grounded,
     citations: blocked ? [] : harness.citations,
+    detectedLanguage: langCode,
+    languageName: langName,
     sources: retrieval.scoredChunks,
     contextPreview: retrieval.context.slice(0, 800) + (retrieval.context.length > 800 ? "…" : ""),
     contextTokenCount: retrieval.contextTokenCount,
@@ -258,12 +279,14 @@ export async function runPipeline(req: PipelineRequest): Promise<PipelineRespons
 }
 
 // ---------------------------------------------------------------------------
-// Blocked-response builder
+// Helper: build a response for a short-circuited/blocked pipeline
 // ---------------------------------------------------------------------------
 function buildBlockedResponse(args: {
   query: string;
   strategy: string;
   engine?: "fast" | "sarvam";
+  detectedLanguage?: string;
+  languageName?: string;
   blockReasons: string[];
   inputGuardrails: GuardrailDecision[];
   inputGuardrailsMs: number;
@@ -279,15 +302,23 @@ function buildBlockedResponse(args: {
       : args.inputGuardrails
   );
 
+  const langCode = args.detectedLanguage ?? "en";
+  const langName = args.languageName ?? "English";
+
+  const refusalEn =
+    "I don't have enough information in the retrieved context to answer this question confidently.";
+  const localizedRefusal = translateGroundedAnswer(refusalEn, undefined, langCode);
+
   return {
     query: args.query,
     strategy: args.strategy,
     engine: args.engine ?? "fast",
-    answer:
-      "I don't have enough information in the retrieved context to answer this question confidently.",
+    answer: localizedRefusal,
     confidence: "refused",
     grounded: false,
     citations: [],
+    detectedLanguage: langCode,
+    languageName: langName,
     sources: args.retrieval?.scoredChunks ?? [],
     contextPreview: args.retrieval
       ? args.retrieval.context.slice(0, 800) + (args.retrieval.context.length > 800 ? "…" : "")
@@ -321,9 +352,6 @@ function buildBlockedResponse(args: {
     },
     blocked: true,
     blockReasons: args.blockReasons,
-    // A blocked pipeline is NOT a network failure — it's a successful refusal.
-    // The system correctly decided not to answer. ok=true means "the pipeline
-    // ran successfully and returned a decision", not "an answer was produced".
     ok: true,
   };
 }
