@@ -46,6 +46,8 @@ const UNSAFE_PATTERNS = [
   /\b(bomb|explosive|terroris|mass shooting)\b/i,
   /\b(child abuse|cp|pedo)\b/i,
   /\b(how to (make|build|synthesize).*(weapon|gun|meth|heroin|cocaine|poison))\b/i,
+  // Prompt injection & adversarial override patterns
+  /\b(ignore (all )?(previous|prior) (instructions|directions|prompts)|disregard (all )?(previous|prior) (instructions|prompts)|override system (prompt|instructions)|you are now in DAN mode|bypass (all )?(safety|guardrails))\b/i,
 ];
 
 const OFF_TOPIC_PATTERNS = [
@@ -67,6 +69,19 @@ const NON_QUESTION_HINTS = [
 
 export function checkInputSafety(query: string): GuardrailDecision {
   const t0 = performance.now();
+
+  // Guard against ultra-long payload attacks
+  if (query.length > 2000) {
+    return {
+      name: "input-safety",
+      pass: false,
+      severity: "block",
+      reason: "Query exceeds maximum allowed length of 2000 characters.",
+      details: { length: query.length },
+      latencyMs: performance.now() - t0,
+    };
+  }
+
   for (const re of UNSAFE_PATTERNS) {
     if (re.test(query)) {
       return {
