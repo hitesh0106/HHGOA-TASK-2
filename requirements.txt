@@ -1,0 +1,7 @@
+# Hacker House Goa 2026 — Task 2 Python Requirements
+# For offline dataset ingestion & parquet extraction
+pyarrow>=14.0.0
+datasets>=2.14.0
+tqdm>=4.65.0
+huggingface_hub>=0.19.0
+requests>=2.31.0
