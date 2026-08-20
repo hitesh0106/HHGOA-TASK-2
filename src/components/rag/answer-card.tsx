@@ -33,19 +33,19 @@ export function AnswerCard({
       label: "Grounded in retrieved context",
       icon: <CheckCircle2 className="w-3.5 h-3.5" />,
       chip: "chip-emerald",
-      tint: "border-l-2 border-l-forest-500",
+      tint: "border-l-2 border-l-forest-500 dark:border-l-emerald-400",
     },
     insufficient: {
       label: "Insufficient evidence",
       icon: <AlertTriangle className="w-3.5 h-3.5" />,
       chip: "chip-gold",
-      tint: "border-l-2 border-l-goa-gold-400",
+      tint: "border-l-2 border-l-goa-gold-400 dark:border-l-goa-gold-400",
     },
     blocked: {
       label: "Refused by guardrail",
       icon: <ShieldAlert className="w-3.5 h-3.5" />,
       chip: "chip-rose",
-      tint: "border-l-2 border-l-rose-400",
+      tint: "border-l-2 border-l-rose-400 dark:border-l-rose-500",
     },
   };
 
@@ -78,30 +78,30 @@ export function AnswerCard({
       </div>
 
       {state === "idle" ? (
-        <p className="text-forest-400 italic text-sm">
+        <p className="text-forest-400 dark:text-forest-500 italic text-sm">
           The grounded answer will appear here after you speak a question.
         </p>
       ) : state === "blocked" ? (
         <div className="space-y-3">
-          <p className="font-serif text-lg text-forest-900 leading-snug">
+          <p className="font-serif text-lg text-forest-900 dark:text-forest-50 leading-snug">
             {answer || "I don't have enough information in the retrieved context to answer this question confidently."}
           </p>
           {warnings.length > 0 && (
-            <div className="rounded-md bg-rose-50/60 border border-rose-200 p-3">
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-rose-700 mb-1.5">
+            <div className="rounded-md bg-rose-50/60 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-3">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-rose-700 dark:text-rose-300 mb-1.5">
                 Why was this blocked?
               </div>
               <ul className="space-y-1">
                 {warnings.map((w, i) => (
-                  <li key={i} className="text-xs text-rose-700 flex items-start gap-1.5">
-                    <span className="text-rose-400 mt-0.5">•</span>
+                  <li key={i} className="text-xs text-rose-700 dark:text-rose-300 flex items-start gap-1.5">
+                    <span className="text-rose-400 dark:text-rose-500 mt-0.5">•</span>
                     <span>{w}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
-          <p className="text-[11px] text-forest-500 italic">
+          <p className="text-[11px] text-forest-500 dark:text-forest-400 italic">
             This is a feature, not a bug — the system correctly refused to answer
             rather than risk hallucinating. Try rephrasing your question or speaking
             in English (the corpus language).
@@ -109,22 +109,22 @@ export function AnswerCard({
         </div>
       ) : state === "insufficient" ? (
         <div className="space-y-3">
-          <p className="font-serif text-lg text-forest-900 leading-snug">
+          <p className="font-serif text-lg text-forest-900 dark:text-forest-50 leading-snug">
             {answer}
           </p>
-          <p className="text-xs text-goa-gold-800 italic">
+          <p className="text-xs text-goa-gold-800 dark:text-goa-gold-300 italic">
             The retrieved context did not contain enough evidence to answer this
             question confidently.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="font-serif text-lg text-forest-900 leading-snug">
+          <p className="font-serif text-lg text-forest-900 dark:text-forest-50 leading-snug">
             {answer}
           </p>
           {citations.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-forest-100">
-              <span className="text-[11px] text-forest-500">Citations:</span>
+            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-forest-100 dark:border-forest-800/60">
+              <span className="text-[11px] text-forest-500 dark:text-forest-400">Citations:</span>
               {citations.map((c) => (
                 <span
                   key={c}
@@ -136,7 +136,7 @@ export function AnswerCard({
             </div>
           )}
           {warnings.length > 0 && (
-            <div className="text-xs text-forest-600 italic">
+            <div className="text-xs text-forest-600 dark:text-forest-400 italic">
               {warnings.join(" ")}
             </div>
           )}

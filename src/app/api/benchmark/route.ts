@@ -1,20 +1,23 @@
 /**
- * POST /api/benchmark
- * Runs the benchmark suite. Returns a BenchmarkReport with P50/P70/P100
- * latency stats for each chunking strategy.
+ * Benchmark API Endpoint (/api/benchmark)
+ * ========================================
  *
- * Body: {
- *   queries?: string[],
- *   strategies?: ("fixed"|"overlapping"|"semantic"|"metadata-aware")[],
- *   includeFullPipeline?: boolean,
- *   fullPipelineQueryCount?: number
- * }
+ * Single Source of Truth backend route for benchmark execution and inspection.
  *
- * The retrieval-only benchmark is fast (<10s for 30 queries × 4 strategies).
- * The full-pipeline benchmark calls the LLM and can take minutes.
+ * POST: Runs the unified benchmark suite and returns the authoritative UnifiedBenchmarkReport.
+ * GET:  Returns the latest persisted benchmark run, or query & strategy metadata.
  */
+
 import { NextRequest, NextResponse } from "next/server";
-import { generateBenchmarkReport } from "@/lib/benchmarks/runner";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import {
+  runBenchmarkSuite,
+  getLatestBenchmarkRun,
+  type BenchmarkConfig,
+  type UnifiedBenchmarkReport,
+} from "@/lib/benchmarks/runner";
+import { CANONICAL_300_QUERIES } from "@/lib/benchmarks/queries";
 import { getAllLoadedStrategies } from "@/lib/vector-db";
 import { CHUNKING_STRATEGIES, type ChunkingStrategy } from "@/lib/chunking";
 import { ensureVectorStoresLoaded } from "@/lib/init";
@@ -25,45 +28,66 @@ export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const t0 = performance.now();
-  // Ensure vector stores are loaded (idempotent)
   await ensureVectorStoresLoaded();
+
   try {
     const body = await req.json().catch(() => ({}));
     const loaded = getAllLoadedStrategies();
+
     if (loaded.length === 0) {
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "No vector stores loaded. Run `python scripts/ingest_msmarco.py` first.",
+          error: "No vector stores loaded. Run vector ingestion first.",
         },
         { status: 503 }
       );
     }
+
     const requestedStrategies = Array.isArray(body.strategies)
       ? (body.strategies as ChunkingStrategy[])
+      : body.strategy
+      ? [body.strategy as ChunkingStrategy]
       : CHUNKING_STRATEGIES;
+
     const strategies = requestedStrategies.filter((s) => loaded.includes(s));
     if (strategies.length === 0) {
       return NextResponse.json(
-        { ok: false, error: `No requested strategies are loaded. Loaded: ${loaded.join(", ")}` },
+        {
+          ok: false,
+          error: `No requested strategies are loaded. Loaded: ${loaded.join(", ")}`,
+        },
         { status: 400 }
       );
     }
 
-    const engine = body.engine === "sarvam" ? "sarvam" : "fast";
+    const queryCount =
+      typeof body.queryCount === "number" && body.queryCount > 0
+        ? body.queryCount
+        : typeof body.queries === "object" && Array.isArray(body.queries)
+        ? body.queries.length
+        : 300;
 
-    const report = await generateBenchmarkReport({
-      queries: Array.isArray(body.queries) ? body.queries : undefined,
+    const engine = body.engine === "sarvam" ? "sarvam" : "fast";
+    const budgetMs = typeof body.budgetMs === "number" ? body.budgetMs : 50;
+    const warmupCount = typeof body.warmupCount === "number" ? body.warmupCount : 20;
+
+    const config: BenchmarkConfig = {
+      queryCount,
       strategies,
-      includeFullPipeline: body.includeFullPipeline !== false,
-      fullPipelineQueryCount: body.fullPipelineQueryCount ?? undefined,
       engine,
-    });
+      budgetMs,
+      warmupCount,
+      topK: body.topK ?? 5,
+    };
+
+    const report = await runBenchmarkSuite(config);
 
     return NextResponse.json({
       ok: true,
       report,
+      benchmark_run_id: report.benchmark_run_id,
+      timestamp: report.timestamp,
       apiLatencyMs: performance.now() - t0,
     });
   } catch (e) {
@@ -75,15 +99,30 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * GET /api/benchmark
- * Returns the default benchmark query set + strategies so the UI can
- * preview them without running anything.
- */
 export async function GET() {
+  await ensureVectorStoresLoaded();
+
+  // Try in-memory cached run first
+  let latest = getLatestBenchmarkRun();
+
+  // Try reading persisted run from disk if memory is empty
+  if (!latest) {
+    try {
+      const filePath = path.join(process.cwd(), "data", "benchmarks", "latest-benchmark.json");
+      const raw = await readFile(filePath, "utf8");
+      latest = JSON.parse(raw) as UnifiedBenchmarkReport;
+    } catch {
+      // Ignore if file doesn't exist yet
+    }
+  }
+
   return NextResponse.json({
     ok: true,
-    queries: (await import("@/lib/benchmarks/runner")).DEFAULT_BENCHMARK_QUERIES,
+    hasLatest: !!latest,
+    report: latest ?? null,
+    benchmark_run_id: latest?.benchmark_run_id ?? null,
+    timestamp: latest?.timestamp ?? null,
+    totalCanonicalQueries: CANONICAL_300_QUERIES.length,
     strategies: CHUNKING_STRATEGIES,
     loadedStrategies: getAllLoadedStrategies(),
   });

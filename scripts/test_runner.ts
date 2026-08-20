@@ -40,6 +40,7 @@ import {
   combineDecisions,
 } from "../src/lib/guardrails";
 import { computeStats } from "../src/lib/benchmarks/stats";
+import { getCanonicalBenchmarkQueries } from "../src/lib/benchmarks/queries";
 
 let passed = 0;
 let failed = 0;
@@ -193,6 +194,27 @@ runTest("computeStats calculates P50..P100 accurately", () => {
   assert.equal(stats.min, 10);
   assert.equal(stats.p100, 100);
   assert.equal(stats.mean, 55);
+});
+
+console.log("\n==================================================");
+console.log("RUNNING SUITE 5: CANONICAL BENCHMARK QUERIES & ENGINE");
+console.log("==================================================");
+
+runTest("getCanonicalBenchmarkQueries generates 300 queries with 45/35/20 language ratio", () => {
+  const queries = getCanonicalBenchmarkQueries(300);
+  assert.equal(queries.length, 300);
+  const en = queries.filter((q) => q.language === "en").length;
+  const hi = queries.filter((q) => q.language === "hi").length;
+  const bn = queries.filter((q) => q.language === "bn").length;
+  assert.equal(en, 135);
+  assert.equal(hi, 105);
+  assert.equal(bn, 60);
+});
+
+runTest("getCanonicalBenchmarkQueries is deterministic", () => {
+  const q1 = getCanonicalBenchmarkQueries(100);
+  const q2 = getCanonicalBenchmarkQueries(100);
+  assert.deepEqual(q1, q2);
 });
 
 console.log("\n==================================================");

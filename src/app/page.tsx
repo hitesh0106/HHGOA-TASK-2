@@ -1,34 +1,32 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Mic, Loader2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import { Navbar } from "@/components/rag/navbar";
-import { Hero } from "@/components/rag/hero";
-import { VoiceRecorder } from "@/components/rag/voice-recorder";
-import { TranscriptCard } from "@/components/rag/transcript-card";
-import { RAGPipeline, type PipelineStageId, type PipelineStageStatus } from "@/components/rag/rag-pipeline";
-import { RetrievalPanel, type RetrievedChunkData } from "@/components/rag/retrieval-panel";
-import { AnswerCard, type AnswerState } from "@/components/rag/answer-card";
-import { Sources } from "@/components/rag/sources";
-import { LatencyMetrics } from "@/components/rag/latency-metrics";
-import { ChunkingSelector } from "@/components/rag/chunking-selector";
-import { GuardrailStatus, type GuardrailDecision } from "@/components/rag/guardrail-status";
-import { SystemStatus } from "@/components/rag/system-status";
+import { VoiceWavePortal } from "@/components/rag/voice-wave-portal";
+import { QueryChatInput } from "@/components/rag/query-chat-input";
+import { ConversationChatCard, type ChatTurnData } from "@/components/rag/conversation-chat-card";
+import { PromptSuggestions } from "@/components/rag/prompt-suggestions";
 import { EvaluationDashboard } from "@/components/rag/evaluation-dashboard";
+import { SystemStatus } from "@/components/rag/system-status";
 
 import { CHUNKING_STRATEGIES, type ChunkingStrategy } from "@/lib/chunking";
+import type { RagEngine, SttMode } from "@/components/rag/chunking-selector";
 
 // ---------------------------------------------------------------------------
-// Types (mirror backend response shapes)
+// Response Shapes (mirror backend contracts)
 // ---------------------------------------------------------------------------
 interface PipelineResponse {
   query: string;
   strategy: string;
+  engine?: "fast" | "sarvam";
   answer: string;
   confidence: "high" | "medium" | "low" | "refused";
   grounded: boolean;
   citations: number[];
+  detectedLanguage?: string;
+  languageName?: string;
   sources: Array<{
     chunk: {
       id: string;
@@ -40,23 +38,22 @@ interface PipelineResponse {
     score: number;
     rank: number;
   }>;
-  contextPreview: string;
-  contextTokenCount: number;
-  retrievalStats: {
+  contextPreview?: string;
+  contextTokenCount?: number;
+  retrievalStats?: {
     strategy: string;
     chunkCount: number;
     topK: number;
     latencyMs: number;
     candidatesScanned: number;
   };
-  retrievalWarnings: string[];
-  guardrails: {
-    input: GuardrailDecision[];
-    output: GuardrailDecision[];
+  retrievalWarnings?: string[];
+  guardrails?: {
+    input: any[];
+    output: any[];
     combined: { block: boolean; warn: boolean; reasons: string[]; totalLatencyMs: number };
   };
-  harness: { attempts: number; finishReason: string | null; warnings: string[] };
-  timings: {
+  timings?: {
     inputGuardrailsMs: number;
     retrievalMs: number;
     retrievalGuardrailsMs: number;
@@ -64,9 +61,10 @@ interface PipelineResponse {
     outputGuardrailsMs: number;
     totalMs: number;
   };
-  blocked: boolean;
-  blockReasons: string[];
+  blocked?: boolean;
+  blockReasons?: string[];
   ok: boolean;
+  error?: string;
 }
 
 interface SttResponse {
@@ -87,45 +85,52 @@ interface SystemHealth {
   idfLoaded: boolean;
   idfSize: number;
   uptime: number;
-  vectorStores: Array<{ strategy: string; chunks: number; docs: number }>;
+  vectorStores: Array<{ strategy: string; chunks: number; docs: number; loaded?: boolean }>;
   summary?: { doc_count?: number };
 }
 
 type Tab = "voice" | "evaluation" | "system";
-type RecorderState = "idle" | "listening" | "transcribing" | "processing" | "ready";
 
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
 export default function Home() {
   const [tab, setTab] = useState<Tab>("voice");
 
-  // System status
+  // System health
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [loadedStrategies, setLoadedStrategies] = useState<string[]>([]);
 
-  // Recording state
-  const [recorderState, setRecorderState] = useState<RecorderState>("idle");
-  const [transcript, setTranscript] = useState("");
-  const [sttLatency, setSttLatency] = useState<number | null>(null);
-  const [sttLang, setSttLang] = useState<string | null>(null);
-  const [sttError, setSttError] = useState<string | null>(null);
+  // Runtime Controls
+  const [strategy, setStrategy] = useState<ChunkingStrategy>("overlapping");
+  const [engine, setEngine] = useState<RagEngine>("fast");
+  const [language, setLanguage] = useState<string>("auto");
+  const [sttMode, setSttMode] = useState<SttMode>("translate");
+  const [topK] = useState(5);
+  const [useLlmJudge] = useState(false);
+
+  // Multi-Turn Conversation Turns
+  const [turns, setTurns] = useState<ChatTurnData[]>([]);
+
+  // Telemetry & Recording
+  const [isWorking, setIsWorking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-
-  // Config
-  const [strategy, setStrategy] = useState<ChunkingStrategy>("overlapping");
-  const [topK, setTopK] = useState(5);
-  const [useLlmJudge, setUseLlmJudge] = useState(false);
-  const [sttMode, setSttMode] = useState<"transcribe" | "translate">("transcribe");
-  const [engine, setEngine] = useState<RagEngine>("fast");
-
-  // Pipeline result
-  const [result, setResult] = useState<PipelineResponse | null>(null);
-  const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // -------------------------------------------------------------------------
-  // Fetch system health on mount and periodically
+  // Auto-scroll chat viewport to latest message
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (turns.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [turns, isWorking]);
+
+  // -------------------------------------------------------------------------
+  // Fetch System Health
   // -------------------------------------------------------------------------
   const fetchHealth = useCallback(async () => {
     try {
@@ -146,468 +151,346 @@ export default function Home() {
     return () => clearInterval(id);
   }, [fetchHealth]);
 
+  // Recording Timer
+  useEffect(() => {
+    if (isListening) {
+      setRecordingSeconds(0);
+      timerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setRecordingSeconds(0);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isListening]);
+
   // -------------------------------------------------------------------------
-  // Recording
+  // Execute Real RAG Pipeline (Used by both Voice & Text)
+  // -------------------------------------------------------------------------
+  const executeQuery = async (
+    queryText: string,
+    isVoice = false,
+    sttLatencyMs: number | null = null,
+    sttLanguage: string | null = null
+  ) => {
+    const trimmed = queryText.trim();
+    if (!trimmed || isWorking) return;
+
+    setGlobalError(null);
+    setIsWorking(true);
+
+    const turnId = `turn-${Date.now()}`;
+    const newTurn: ChatTurnData = {
+      id: turnId,
+      userQuery: trimmed,
+      isVoice,
+      sttLatencyMs,
+      sttLanguage,
+      timestamp: new Date(),
+      isProcessing: true,
+    };
+
+    setTurns((prev) => [...prev, newTurn]);
+
+    try {
+      const res = await fetch("/api/rag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: trimmed,
+          strategy,
+          engine,
+          language: sttLanguage || (language !== "auto" ? language : undefined),
+          topK,
+          useLlmJudge,
+        }),
+      });
+
+      const data: PipelineResponse = await res.json();
+
+      if (!res.ok && !data.ok) {
+        throw new Error(data.error ?? "RAG pipeline execution failed.");
+      }
+
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === turnId
+            ? {
+                ...t,
+                isProcessing: false,
+                result: {
+                  strategy: data.strategy || strategy,
+                  engine: (data.engine as "fast" | "sarvam") || engine,
+                  answer: data.answer || "No grounded answer could be synthesized.",
+                  confidence: data.confidence,
+                  grounded: data.grounded,
+                  citations: data.citations || [],
+                  detectedLanguage: data.detectedLanguage,
+                  languageName: data.languageName,
+                  sources: data.sources || [],
+                  contextPreview: data.contextPreview,
+                  guardrails: data.guardrails,
+                  timings: data.timings,
+                  blocked: data.blocked,
+                  blockReasons: data.blockReasons,
+                },
+              }
+            : t
+        )
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setGlobalError(msg);
+
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === turnId
+            ? {
+                ...t,
+                isProcessing: false,
+                result: {
+                  strategy,
+                  engine,
+                  answer: `Pipeline execution failed: ${msg}`,
+                  confidence: "refused",
+                  grounded: false,
+                  citations: [],
+                  sources: [],
+                  blocked: true,
+                  blockReasons: [msg],
+                },
+              }
+            : t
+        )
+      );
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Voice Recording Flow (Sarvam AI Saaras v3)
   // -------------------------------------------------------------------------
   const startRecording = useCallback(async () => {
-    setSttError(null);
-    setTranscript("");
-    setSttLatency(null);
-    setSttLang(null);
-    setResult(null);
-    setPipelineError(null);
-
+    setGlobalError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
           channelCount: 1,
           sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
         },
       });
-      // Try MIME types in priority order. We prefer plain "audio/webm" (no
-      // codec suffix) because Sarvam does strict string matching and rejects
-      // "audio/webm;codecs=opus". The backend also sanitizes the MIME type,
-      // but recording with a clean MIME from the start avoids edge cases.
-      const mimeCandidates = [
-        "audio/webm",
-        "audio/ogg",
-        "audio/mp4",
-        "audio/webm;codecs=opus",
-      ];
-      const mimeType =
-        mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
+      const mr = new MediaRecorder(stream, { mimeType });
+      mr.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: mimeType || "audio/webm",
-        });
+
+      mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        await transcribeAudio(audioBlob);
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        await transcribeAndExecute(blob);
       };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setRecorderState("listening");
+
+      mediaRecorderRef.current = mr;
+      mr.start(250);
+      setIsListening(true);
     } catch (e) {
-      setSttError(
-        e instanceof Error
-          ? `Microphone access failed: ${e.message}`
-          : "Microphone access failed. Check browser permissions."
-      );
+      const msg = e instanceof Error ? e.message : String(e);
+      setGlobalError(`Microphone access error: ${msg}`);
+      setIsListening(false);
     }
-  }, [strategy, topK, useLlmJudge, sttMode, engine]);
+  }, [language, sttMode]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && recorderState === "listening") {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
-      setRecorderState("transcribing");
+      setIsListening(false);
     }
-  }, [recorderState]);
+  }, []);
 
-  const transcribeAudio = useCallback(
-    async (audioBlob: Blob) => {
-      setRecorderState("transcribing");
-      try {
-        const formData = new FormData();
-        formData.append("audio", audioBlob, "recording.webm");
-        formData.append("mode", sttMode);
-        const res = await fetch("/api/stt", { method: "POST", body: formData });
-        const data: SttResponse = await res.json();
-        if (!data.ok) {
-          setSttError(data.error ?? "STT failed");
-          setRecorderState("idle");
-        } else {
-          setTranscript(data.transcript);
-          setSttLatency(data.sttLatencyMs);
-          setSttLang(data.languageCode);
-          if (data.transcript.trim().split(/\s+/).length >= 2) {
-            await runPipeline(data.transcript);
-          } else {
-            setRecorderState("ready");
-          }
-        }
-      } catch (e) {
-        setSttError(e instanceof Error ? e.message : "Network error during STT");
-        setRecorderState("idle");
-      }
-    },
-    [strategy, topK, useLlmJudge, sttMode, engine]
-  );
-
-  // -------------------------------------------------------------------------
-  // Pipeline
-  // -------------------------------------------------------------------------
-  const runPipeline = useCallback(
-    async (query: string) => {
-      setRecorderState("processing");
-      setPipelineError(null);
-      setResult(null);
-      try {
-        const res = await fetch("/api/rag", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query,
-            strategy,
-            engine,
-            topK,
-            useLlmJudge,
-            minScore: 0.05,
-            maxContextTokens: 2048,
-          }),
-        });
-        const data: PipelineResponse & { error?: string } = await res.json();
-        if (!data.ok && !data.blocked) {
-          // Distinguish between real errors and HTTP-level issues
-          const errMsg = data.error || `Pipeline request failed (HTTP ${res.status})`;
-          setPipelineError(errMsg);
-        } else {
-          setResult(data);
-        }
-      } catch (e) {
-        setPipelineError(e instanceof Error ? e.message : "Network error during RAG");
-      } finally {
-        setRecorderState("ready");
-      }
-    },
-    [strategy, topK, useLlmJudge, sttMode, engine]
-  );
-
-  // -------------------------------------------------------------------------
-  // Derived state
-  // -------------------------------------------------------------------------
-  const isWorking = recorderState === "transcribing" || recorderState === "processing";
-
-  // Pipeline stage statuses (derived from recorder state + result)
-  const stages: Record<PipelineStageId, PipelineStageStatus> = {
-    voice: recorderState === "idle" && !result ? "pending" : "done",
-    transcript:
-      recorderState === "transcribing"
-        ? "active"
-        : transcript
-        ? "done"
-        : "pending",
-    retrieve:
-      recorderState === "processing"
-        ? "active"
-        : result
-        ? "done"
-        : "pending",
-    ground:
-      result && !result.blocked && result.grounded
-        ? "done"
-        : result && (result.blocked || !result.grounded)
-        ? "blocked"
-        : recorderState === "processing"
-        ? "active"
-        : "pending",
-    answer: result ? "done" : recorderState === "processing" ? "active" : "pending",
+  const toggleVoice = () => {
+    if (isListening) stopRecording();
+    else if (!isWorking) startRecording();
   };
 
-  const stageLatencies: Partial<Record<PipelineStageId, number>> = result
-    ? {
-        voice: sttLatency ?? undefined,
-        transcript: undefined,
-        retrieve: result.timings.retrievalMs,
-        ground: result.timings.inputGuardrailsMs + result.timings.retrievalGuardrailsMs + result.timings.outputGuardrailsMs,
-        answer: result.timings.generationMs,
+  const transcribeAndExecute = async (blob: Blob) => {
+    setIsWorking(true);
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "recording.webm");
+      form.append("mode", sttMode);
+      if (language && language !== "auto") {
+        form.append("language_code", language);
       }
-    : {};
 
-  // Answer state
-  let answerState: AnswerState = "idle";
-  if (result) {
-    if (result.blocked) answerState = "blocked";
-    else if (!result.grounded || result.confidence === "refused") answerState = "insufficient";
-    else answerState = "grounded";
-  }
+      const res = await fetch("/api/stt", { method: "POST", body: form });
+      const data: SttResponse = await res.json();
 
-  // Sources (from result, mapped to SourceRef shape)
-  const sources = result?.citations.map((c) => {
-    const src = result.sources.find((s) => s.rank === c - 1) ?? result.sources[c - 1];
-    return {
-      citation: c,
-      docId: src?.chunk?.doc_id ?? "",
-      excerpt: src?.chunk?.text ?? "",
-      score: src?.score ?? 0,
-      language: src?.chunk?.metadata?.doc_language as string | undefined,
-    };
-  }) ?? [];
+      if (!data.ok) {
+        throw new Error(data.error ?? "STT transcription failed.");
+      }
 
-  // Retrieved chunks (top-K from result)
-  const retrievedChunks: RetrievedChunkData[] = result?.sources.map((s) => ({
-    id: s.chunk.id,
-    docId: s.chunk.doc_id,
-    text: s.chunk.text,
-    score: s.score,
-    rank: s.rank,
-    strategy: s.chunk.strategy,
-    metadata: s.chunk.metadata,
-  })) ?? [];
+      const recognized = data.transcript?.trim();
+      if (!recognized) {
+        throw new Error("No speech detected. Please speak closer to the microphone.");
+      }
 
-  // Retrieval guardrail decision
-  const retrievalGuardrail = result?.guardrails.input.find((g) => g.name === "retrieval-sufficiency") ??
-    result?.guardrails.input.find((g) => g.name.includes("retrieval")) ?? null;
+      await executeQuery(recognized, true, data.sttLatencyMs, data.languageCode);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setGlobalError(msg);
+      setIsWorking(false);
+    }
+  };
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
+  const handleNewConversation = () => {
+    setTurns([]);
+    setGlobalError(null);
+  };
+
   const systemOnline = (health?.vectorStores?.length ?? 0) > 0 && (health?.sarvamApiKeyConfigured ?? false);
 
   return (
-    <div className="bg-goa-canvas min-h-screen flex flex-col">
-      <Navbar active={tab} onNavigate={setTab} systemOnline={systemOnline} />
+    <div className="h-dvh w-full overflow-hidden flex flex-col bg-goa-canvas select-none transition-colors duration-200">
+      {/* 1. Header (Fixed at top / flex-shrink-0) */}
+      <div className="shrink-0 z-30">
+        <Navbar active={tab} onNavigate={setTab} systemOnline={systemOnline} />
+      </div>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+      {/* 2. Main Chat Viewport Shell (flex-1 min-h-0 overflow-hidden) */}
+      <main className="flex-1 min-h-0 overflow-hidden flex flex-col w-full">
         {tab === "voice" && (
-          <VoiceRagTab
-            recorderState={recorderState}
-            transcript={transcript}
-            sttLatency={sttLatency}
-            sttLang={sttLang}
-            sttError={sttError}
-            pipelineError={pipelineError}
-            result={result}
-            isWorking={isWorking}
-            strategy={strategy}
-            setStrategy={setStrategy}
-            topK={topK}
-            setTopK={setTopK}
-            useLlmJudge={useLlmJudge}
-            setUseLlmJudge={setUseLlmJudge}
-            loadedStrategies={loadedStrategies}
-            sttMode={sttMode}
-            setSttMode={setSttMode}
-            engine={engine}
-            setEngine={setEngine}
-            stages={stages}
-            stageLatencies={stageLatencies}
-            answerState={answerState}
-            sources={sources}
-            retrievedChunks={retrievedChunks}
-            retrievalGuardrail={retrievalGuardrail}
-            onStart={startRecording}
-            onStop={stopRecording}
-            onRerun={() => transcript && runPipeline(transcript)}
-          />
-        )}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col w-full">
+            {/* Error Banner if any (flex-shrink-0) */}
+            {globalError && (
+              <div className="shrink-0 max-w-3xl mx-auto my-1 px-4 w-full">
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2 shadow-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="flex-1">{globalError}</div>
+                </div>
+              </div>
+            )}
 
-        {tab === "evaluation" && (
-          <div className="pt-8">
-            <EvaluationDashboard />
+            {/* ChatMessagesViewport (THE ONLY INTERNAL SCROLL CONTAINER: flex-1, min-h-0, overflow-y-auto) */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-area-custom px-4 sm:px-6 py-3 flex flex-col">
+              <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col">
+                {turns.length > 0 ? (
+                  <ConversationChatCard turns={turns} />
+                ) : (
+                  /* Landing Experience matching user specification */
+                  <div className="my-auto py-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
+                    {/* Title & Subtitle */}
+                    <div className="space-y-1">
+                      <h1 className="font-serif text-3xl sm:text-4xl text-forest-950 dark:text-forest-50 tracking-tight leading-tight">
+                        Ask. Retrieve.{" "}
+                        <span className="relative inline-block italic text-forest-800 dark:text-forest-200">
+                          Understand.
+                          <svg
+                            className="absolute -bottom-1 left-0 w-full h-2 pointer-events-none"
+                            viewBox="0 0 200 8"
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M2 5 Q 50 1 100 4 T 198 3"
+                              stroke="var(--accent)"
+                              strokeWidth="2.5"
+                              fill="none"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </span>
+                      </h1>
+                      <p className="text-xs sm:text-sm text-forest-600 dark:text-forest-300">
+                        Voice-enabled RAG grounded in MSMARCO-XI
+                      </p>
+                    </div>
+
+                    {/* Animated Waveform & Central Mic Portal */}
+                    <div className="w-full max-w-lg mx-auto">
+                      <VoiceWavePortal
+                        state={
+                          isListening
+                            ? "listening"
+                            : isWorking
+                            ? "processing"
+                            : "idle"
+                        }
+                        onStart={startRecording}
+                        onStop={stopRecording}
+                        compact={true}
+                      />
+                    </div>
+
+                    {/* Sample Questions */}
+                    <div className="w-full max-w-xl mx-auto pt-1">
+                      <PromptSuggestions
+                        onSelectPrompt={(prompt) => executeQuery(prompt, false)}
+                        disabled={isWorking || isListening}
+                      />
+                    </div>
+                  </div>
+                )}
+                {/* Auto-scroll target anchor */}
+                <div ref={messagesEndRef} className="h-1" />
+              </div>
+            </div>
+
+            {/* ComposerArea (Always pinned at bottom / flex-shrink-0) */}
+            <div className="shrink-0 border-t border-forest-100/60 dark:border-forest-800/40 bg-white/70 dark:bg-[#09140f]/80 backdrop-blur-md px-4 sm:px-6 pt-1.5 pb-2">
+              <div className="max-w-3xl mx-auto w-full">
+                <QueryChatInput
+                  onSendText={(text) => executeQuery(text, false)}
+                  onToggleVoice={toggleVoice}
+                  isListening={isListening}
+                  isWorking={isWorking}
+                  recordingSeconds={recordingSeconds}
+                  strategy={strategy}
+                  onStrategyChange={setStrategy}
+                  engine={engine}
+                  onEngineChange={setEngine}
+                  language={language}
+                  onLanguageChange={setLanguage}
+                  sttMode={sttMode}
+                  onSttModeChange={setSttMode}
+                  loadedStrategies={loadedStrategies}
+                  onNewChat={handleNewConversation}
+                  hasMessages={turns.length > 0}
+                />
+              </div>
+            </div>
           </div>
         )}
 
-        {tab === "system" && (
-          <div className="pt-8 max-w-3xl mx-auto">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-goa-gold-300/60 bg-goa-gold-50/80">
-                <span className="w-1 h-1 rounded-full bg-goa-gold-500" />
-                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-goa-gold-800">
-                  System
-                </span>
-              </div>
-              <h1 className="mt-4 font-serif text-3xl text-forest-900">System Status</h1>
-              <p className="mt-2 text-sm text-forest-600 max-w-md mx-auto">
-                Real-time health of the Voice RAG pipeline components.
-              </p>
+        {/* Evaluation View with independent internal scroll container */}
+        {tab === "evaluation" && (
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-area-custom p-4 sm:p-6">
+            <div className="max-w-6xl mx-auto">
+              <EvaluationDashboard />
             </div>
-            {health && (
-              <SystemStatus
-                sarvamConfigured={health.sarvamApiKeyConfigured}
-                vectorStoresLoaded={health.vectorStores?.length ?? 0}
-                totalVectorStores={4}
-                idfSize={health.idfSize}
-                docCount={health.summary?.doc_count ?? 0}
-                uptime={health.uptime}
-              />
-            )}
+          </div>
+        )}
+
+        {/* System View with independent internal scroll container */}
+        {tab === "system" && (
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-area-custom p-4 sm:p-6">
+            <div className="max-w-6xl mx-auto">
+              <SystemStatus health={health} onRefresh={fetchHealth} />
+            </div>
           </div>
         )}
       </main>
-
-      <footer className="mt-auto border-t border-forest-200/60 bg-white/60 backdrop-blur-sm py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-[10px] text-forest-500">
-          <div>
-            HH Goa 2026 · Voice RAG · AI Lab
-          </div>
-          <div className="tabular">
-            Sarvam Saaras v3 · Sarvam-105B · MSMARCO-XI
-          </div>
-        </div>
-      </footer>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Voice RAG tab (the main experience)
-// ---------------------------------------------------------------------------
-interface VoiceRagTabProps {
-  recorderState: RecorderState;
-  transcript: string;
-  sttLatency: number | null;
-  sttLang: string | null;
-  sttError: string | null;
-  pipelineError: string | null;
-  result: PipelineResponse | null;
-  isWorking: boolean;
-  strategy: ChunkingStrategy;
-  setStrategy: (s: ChunkingStrategy) => void;
-  topK: number;
-  setTopK: (n: number) => void;
-  useLlmJudge: boolean;
-  setUseLlmJudge: (b: boolean) => void;
-  loadedStrategies: string[];
-  sttMode: "transcribe" | "translate";
-  setSttMode: (m: "transcribe" | "translate") => void;
-  engine: RagEngine;
-  setEngine: (e: RagEngine) => void;
-  stages: Record<PipelineStageId, PipelineStageStatus>;
-  stageLatencies: Partial<Record<PipelineStageId, number>>;
-  answerState: AnswerState;
-  sources: Array<{ citation: number; docId: string; excerpt: string; score: number; language?: string }>;
-  retrievedChunks: RetrievedChunkData[];
-  retrievalGuardrail: GuardrailDecision | null;
-  onStart: () => void;
-  onStop: () => void;
-  onRerun: () => void;
-}
-
-function VoiceRagTab(props: VoiceRagTabProps) {
-  const {
-    recorderState,
-    transcript,
-    sttLatency,
-    sttLang,
-    sttError,
-    pipelineError,
-    result,
-    isWorking,
-    strategy,
-    setStrategy,
-    topK,
-    setTopK,
-    useLlmJudge,
-    setUseLlmJudge,
-    loadedStrategies,
-    sttMode,
-    setSttMode,
-    engine,
-    setEngine,
-    stages,
-    stageLatencies,
-    answerState,
-    sources,
-    retrievedChunks,
-    retrievalGuardrail,
-    onStart,
-    onStop,
-    onRerun,
-  } = props;
-
-  return (
-    <>
-      <Hero hasStarted={recorderState !== "idle" || !!result} />
-
-      {/* Voice recorder — centered */}
-      <div className="max-w-2xl mx-auto py-6">
-        <VoiceRecorder
-          state={recorderState}
-          transcript={transcript}
-          sttLatencyMs={sttLatency}
-          error={sttError}
-          onStart={onStart}
-          onStop={onStop}
-        />
-      </div>
-
-      {/* Two-column layout below */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-6">
-        {/* Left column: config + transcript */}
-        <div className="lg:col-span-4 space-y-5">
-          <ChunkingSelector
-            strategy={strategy}
-            onChange={setStrategy}
-            topK={topK}
-            onTopKChange={setTopK}
-            useLlmJudge={useLlmJudge}
-            onUseLlmJudgeChange={setUseLlmJudge}
-            loadedStrategies={loadedStrategies}
-            sttMode={sttMode}
-            onSttModeChange={setSttMode}
-            engine={engine}
-            onEngineChange={setEngine}
-          />
-
-          {transcript && (
-            <TranscriptCard
-              transcript={transcript}
-              sttLatencyMs={sttLatency}
-              languageCode={sttLang}
-              onRerun={onRerun}
-              isProcessing={isWorking}
-            />
-          )}
-        </div>
-
-        {/* Right column: pipeline + answer + sources */}
-        <div className="lg:col-span-8 space-y-5">
-          <RAGPipeline stages={stages} latencies={stageLatencies} />
-
-          {pipelineError && (
-            <div className="rounded-lg border border-rose-300 bg-rose-50 p-4 text-xs text-rose-700">
-              <strong>Pipeline error:</strong> {pipelineError}
-            </div>
-          )}
-
-          <AnswerCard
-            answer={result?.answer ?? ""}
-            state={answerState}
-            confidence={result?.confidence ?? "refused"}
-            citations={result?.citations ?? []}
-            warnings={result?.blockReasons ?? []}
-          />
-
-          <LatencyMetrics
-            sttMs={sttLatency}
-            retrievalMs={result?.timings.retrievalMs ?? null}
-            generationMs={result?.timings.generationMs ?? null}
-            totalMs={result?.timings.totalMs ?? null}
-          />
-
-          {retrievedChunks.length > 0 && (
-            <RetrievalPanel
-              chunks={retrievedChunks}
-              totalScanned={result?.retrievalStats.candidatesScanned}
-              retrievalLatencyMs={result?.timings.retrievalMs}
-            />
-          )}
-
-          {sources.length > 0 && (
-            <Sources
-              sources={sources}
-              contextPreview={result?.contextPreview}
-            />
-          )}
-
-          {result && (
-            <GuardrailStatus
-              input={result.guardrails.input}
-              output={result.guardrails.output}
-              retrieval={retrievalGuardrail}
-              combined={result.guardrails.combined}
-            />
-          )}
-        </div>
-      </div>
-    </>
   );
 }

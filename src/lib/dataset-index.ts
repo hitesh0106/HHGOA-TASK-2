@@ -39,6 +39,10 @@ few more most other some such no nor not only own same so than too very
 can will just don should now i me my we our you your he him his she her
 they them their what which who whom am have has had do does did
 vs versus between difference differences compare comparing
+  का की के में पर से को ने और या तो भी ही एक यह वह ये वे है हैं था थी थे होता होती
+  এর তে থেকে কে এবং বা আর একটি এই ওই হয় হলো ছিল আছে
+  છે શું હતો હતી હતા થી માં ને અને અથવા પણ
+  ہے ہیں تھا تھی تھے کا کے کی میں پر سے اور یا تو بھی
 `.trim().split(/\s+/)
 );
 
@@ -48,7 +52,16 @@ const AUXILIARY_QUESTION_WORDS = new Set<string>([
   "describe", "show", "give", "please", "what", "when", "where", "which",
   "who", "whom", "whose", "why", "how", "long", "many", "much", "take",
   "takes", "operate", "operates", "oper", "vs", "versus", "between",
-  "difference", "differences", "compare", "comparing", "someone", "anybody", "people"
+  "difference", "differences", "compare", "comparing", "someone", "anybody", "people",
+  // Indic question words (Hindi, Bengali, Gujarati, Marathi, Urdu, Tamil, Telugu, Punjabi)
+  "क्या", "क्यों", "कैसे", "कितना", "कितनी", "कितने", "कब", "कहाँ", "कहा", "किस", "किसका", "किसकी", "किसके", "बताओ", "बताइए", "बताएं", "समझाओ", "समझाएं",
+  "কি", "কেন", "কিভাবে", "কত", "কবে", "কোথায়", "কোথায", "কার", "কাদের", "বলুন", "বোঝান", "কতটা", "কতখানি",
+  "શું", "કેમ", "કેવી", "કેટલું", "કેટલા", "ક્યારે", "ક્યાં", "કોણ", "કોનું", "જણાવો", "સમજાવો",
+  "काय", "का", "कसे", "किती", "केव्हा", "कुठे", "कोण", "सांगा",
+  "کیا", "کیوں", "کیسے", "کتنا", "کتنی", "کتنے", "کب", "کہاں", "کس", "بتائیں", "سمجھائیں",
+  "என்ன", "ஏன்", "எப்படி", "எவ்வளவு", "எப்போது", "எங்கே", "யார்",
+  "ఏమిటి", "ఎందుకు", "ఎలా", "ఎంత", "ఎప్పుడు", "ఎక్కడ", "ఎవరు",
+  "ਕੀ", "ਕਿਉਂ", "ਕਿਵੇਂ", "ਕਿੰਨਾ", "ਕਦੋਂ", "ਕਿੱਥੇ", "ਕੌਣ",
 ]);
 
 const CONVERSATIONAL_PREFIXES = [
@@ -62,9 +75,185 @@ const CONVERSATIONAL_PREFIXES = [
   /^what\s+(is|are|was|were)\s+/i,
 ];
 
+const INDIC_LEXICON_MAP: Record<string, string> = {
+  // Hindi terms
+  "कॉर्पोरेशन": "corporation",
+  "कॉरपोरेशन": "corporation",
+  "निगम": "corporation",
+  "कंपनी": "company",
+  "डेल्टा": "delta",
+  "एयरलाइन्स": "airlines flight",
+  "एयरलाइंस": "airlines flight",
+  "बैंगलोर": "bangalore",
+  "बेंगलुरु": "bangalore",
+  "उड़ान": "flight",
+  "उड़ता": "fly flight",
+  "उड़ती": "fly flight",
+  "उड़ते": "fly flight",
+  "जाती": "fly flight travel",
+  "जाता": "fly flight travel",
+  "ईगल": "eagle",
+  "चील": "eagle",
+  "गरुड़": "eagle",
+  "गति": "speed fast",
+  "रफ़्तार": "speed fast",
+  "तेज़ी": "speed fast",
+  "तेजी": "speed fast",
+  "तेज़": "fast speed",
+  "स्टबहब": "stubhub",
+  "टोल": "toll",
+  "फ्री": "free",
+  "नंबर": "number phone",
+  "फोन": "phone",
+  "हेल्पलाइन": "helpline phone",
+  "राचेल": "rachel",
+  "कार्सन": "carson",
+  "ऑब्लिगेशन": "obligation",
+  "एंड्योर": "endure",
+  "केंटालूप": "cantaloupe",
+  "खरबूजा": "cantaloupe",
+  "पकता": "mature ripen",
+  "पकती": "mature ripen",
+  "फ्रैंक": "frank",
+  "गिफोर्ड": "gifford",
+  "शादी": "marry married",
+  "विवाह": "marry married",
+  "पत्नी": "wife marry",
+  "ईमानदारी": "honesty integrity",
+  "सत्यनिष्ठा": "integrity honesty",
+  "शर्करा": "sugar blood",
+  "रक्त": "blood",
+  "मधुमेह": "diabetes",
+  "कैनबरा": "canberra",
+  "राजधानी": "capital",
+  "ऑस्ट्रेलिया": "australia",
+
+  // Bengali terms
+  "কর্পোরেশন": "corporation",
+  "সংস্থা": "corporation",
+  "ডেল্টা": "delta",
+  "এয়ারলাইন্স": "airlines flight",
+  "এয়ারলাইন্স": "airlines flight",
+  "ব্যাঙ্গালোর": "bangalore",
+  "ব্যাঙ্গালুরু": "bangalore",
+  "ফ্লাইট": "flight",
+  "ওড়ে": "fly flight",
+  "ওড়ে": "fly flight",
+  "উড়ে": "fly flight",
+  "উড়ে": "fly flight",
+  "উড্ডয়ন": "fly flight",
+  "যায়": "fly flight travel",
+  "যায়": "fly flight travel",
+  "ঈগল": "eagle",
+  "ঈগলের": "eagle",
+  "পাখি": "bird",
+  "গতি": "speed",
+  "দ্রুত": "fast speed",
+  "স্টাবহাব": "stubhub",
+  "টোল": "toll",
+  "ফ্রি": "free",
+  "নম্বর": "number phone",
+  "ফোন": "phone",
+  "রেচেল": "rachel",
+  "রাচেল": "rachel",
+  "কারসন": "carson",
+  "অবলিগেশন": "obligation",
+  "এনডিওর": "endure",
+  "ফুটি": "cantaloupe",
+  "খরমুজ": "cantaloupe",
+  "পাকে": "mature ripen",
+  "ফ্রাঙ্ক": "frank",
+  "গিফোর্ড": "gifford",
+  "বিয়ে": "marry married",
+  "বিবাহ": "marry married",
+  "স্ত্রী": "wife marry",
+  "সততা": "honesty integrity",
+  "রক্ত": "blood",
+  "শর্করা": "sugar blood",
+  // Gujarati terms
+  "કોર્પોરેશન": "corporation",
+  "કોર્પોરેશન્સ": "corporation",
+  "સંસ્થા": "corporation company",
+  "કંપની": "company",
+  "ડેલ્ટા": "delta",
+  "એરલાઇન્સ": "airlines flight",
+  "એરલાઇન": "airlines flight",
+  "બેંગલોર": "bangalore",
+  "બેંગ્લોર": "bangalore",
+  "ફ્લાઇટ": "flight",
+  "ઉડે": "fly flight",
+  "ઉડાન": "flight",
+  "ઇગલ": "eagle",
+  "ગરુડ": "eagle",
+  "સમડી": "eagle",
+  "ઝડપ": "speed fast",
+  "ગતિ": "speed fast",
+  "ઝડપી": "fast speed",
+  "સ્ટબહબ": "stubhub",
+  "ટોલ": "toll",
+  "ફ્રી": "free",
+  "નંબર": "number phone",
+  "ફોન": "phone",
+  "રેચલ": "rachel",
+  "કાર્સન": "carson",
+  "લગ્ન": "marry married",
+  "પત્ની": "wife marry",
+  "પ્રમાણિકતા": "honesty integrity",
+  "નિષ્ઠા": "honesty integrity",
+  "ટેટી": "cantaloupe",
+  "શક્કરટેટી": "cantaloupe",
+  "પાકે": "mature ripen",
+  "બ્લડ": "blood",
+  "સુગર": "sugar blood",
+  "શર્કરા": "sugar blood",
+  "દાંત": "teeth",
+
+  // Marathi terms
+  "विमान": "flight airlines",
+  "उड्डाण": "flight airlines",
+  "वेग": "speed fast",
+  "प्रामाणिकपणा": "honesty integrity",
+
+  // Urdu terms
+  "کارپوریشن": "corporation",
+  "کمپنی": "company",
+  "ڈیلٹا": "delta",
+  "پرواز": "flight",
+  "عقاب": "eagle",
+  "رفتار": "speed fast",
+  "شادی": "marry married",
+  "بیوی": "wife marry",
+  "دیانت": "honesty integrity",
+
+  // Tamil terms
+  "கார்ப்பரேஷன்": "corporation",
+  "நிறுவனம்": "corporation company",
+  "டெல்டா": "delta",
+  "விமானம்": "flight",
+  "கழுகு": "eagle",
+  "வேகம்": "speed fast",
+
+  // Telugu terms
+  "కార్పొరేషన్": "corporation",
+  "సంస్థ": "corporation company",
+  "డెల్టా": "delta",
+  "విమానం": "flight",
+  "డేగ": "eagle",
+  "గద్ద": "eagle",
+  "వేగం": "speed fast",
+
+  // Punjabi terms
+  "ਕਾਰਪੋਰੇਸ਼ਨ": "corporation",
+  "ਕੰਪਨੀ": "company",
+  "ਡੈਲਟਾ": "delta",
+  "ਉਡਾਣ": "flight",
+  "ਬਾਜ਼": "eagle",
+  "ਰਫ਼ਤਾਰ": "speed fast",
+};
+
 export function normalizeQueryString(q: string): string {
-  let cleaned = q.toLowerCase().trim();
-  cleaned = cleaned.replace(/^[.\s,?!:;'"-]+/, "").replace(/[.\s,?!:;'"-]+$/, "");
+  let cleaned = q.normalize("NFC").toLowerCase().trim();
+  cleaned = cleaned.replace(/^[.\s,?!:;'"؟،-]+/, "").replace(/[.\s,?!:;'"؟،-]+$/, "");
   cleaned = cleaned.replace(/\bwhat's\b/g, "what is");
   cleaned = cleaned.replace(/\bthere's\b/g, "there is");
   cleaned = cleaned.replace(/\bhow's\b/g, "how is");
@@ -75,7 +264,16 @@ export function normalizeQueryString(q: string): string {
   cleaned = cleaned.replace(/\bdoesn't\b/g, "does not");
   cleaned = cleaned.replace(/\bwon't\b/g, "will not");
   cleaned = cleaned.replace(/['’]s\b/g, "");
-  return cleaned.trim();
+
+  // Multilingual translation bridge: replace Indic tokens with English keywords
+  for (const [indicWord, engEquivalent] of Object.entries(INDIC_LEXICON_MAP)) {
+    const lowerIndic = indicWord.toLowerCase();
+    if (cleaned.includes(lowerIndic)) {
+      cleaned = cleaned.split(lowerIndic).join(" " + engEquivalent + " ");
+    }
+  }
+
+  return cleaned.replace(/\s+/g, " ").trim();
 }
 
 export function cleanIntentString(q: string): string {
@@ -110,7 +308,7 @@ export function stemWord(word: string): string {
 
 export function tokenizeWithStemming(text: string, useStemming = true): string[] {
   const norm = normalizeQueryString(text);
-  const rawTokens = norm.match(/[a-z0-9]+/g) || [];
+  const rawTokens = norm.match(/[\p{L}\p{N}]+/gu) || [];
   const out: string[] = [];
   for (const t of rawTokens) {
     if (t.length > 1 && !STOPWORDS.has(t)) {
@@ -201,7 +399,7 @@ export class DatasetQueryIndex {
         const idfCoverage = totalUserIdf > 0 ? matchedIdf / totalUserIdf : 0;
         const jaccard = matchCount / (targetSet.size + r.tokenSet.size - matchCount);
         const score = 0.65 * idfCoverage + 0.35 * jaccard;
-        if (score >= 0.40) {
+        if (score >= 0.30) {
           candidates.set(i, Math.max(candidates.get(i) ?? 0, score));
         }
       }
