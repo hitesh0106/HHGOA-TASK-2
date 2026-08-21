@@ -273,7 +273,7 @@ export function EvaluationDashboard() {
           </div>
           <div className="p-2 rounded bg-forest-50/50 dark:bg-forest-950/40 border border-forest-100 dark:border-forest-800/60">
             <span className="text-[9px] uppercase font-semibold text-forest-500 dark:text-forest-400 block">SLA Target</span>
-            <span className="font-bold text-forest-800 dark:text-forest-200 text-[11px]">P95 &le; 50.0ms</span>
+            <span className="font-bold text-forest-800 dark:text-forest-200 text-[11px]">&lt; 50.0ms Pipeline</span>
           </div>
         </div>
 
@@ -381,7 +381,7 @@ export function EvaluationDashboard() {
                 Strategy Comparison — Fast Local RAG Pipeline Latency (ms)
               </div>
               <span className="text-[11px] text-forest-500 dark:text-forest-400">
-                SLA Target: P95 &le; 50.0ms
+                SLA Target: &lt; 50.0ms (P50/P70/P95/P100)
               </span>
             </div>
 
@@ -447,9 +447,16 @@ export function EvaluationDashboard() {
                           {res.groundingRate?.toFixed(1) ?? "—"}%
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          {res.slaPass ? (
+                          {res.stageStats?.total?.p100 !== undefined && res.stageStats.total.p100 <= 50 ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                              PASS
+                              PASS (100%)
+                            </span>
+                          ) : res.slaPass ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"
+                              title={`P95 <= 50ms (${res.stageStats?.total?.p95?.toFixed(1)}ms), but P100 tail is ${res.stageStats?.total?.p100?.toFixed(1)}ms`}
+                            >
+                              PASS (P95)
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">

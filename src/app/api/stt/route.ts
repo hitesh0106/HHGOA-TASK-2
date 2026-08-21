@@ -40,6 +40,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Enforce 15MB maximum audio upload size limit (Task 2 Security requirement)
+    const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // 15MB
+    if (audio.length > MAX_AUDIO_BYTES) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Audio payload too large. Maximum supported audio file size is 15MB.",
+        },
+        { status: 413 }
+      );
+    }
+
     const result = await transcribeAudio({
       audio,
       mimeType: audioFile.type || "audio/webm",
