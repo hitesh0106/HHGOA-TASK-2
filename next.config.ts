@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
+const isVercel = Boolean(process.env.VERCEL);
+
 const nextConfig: NextConfig = {
-  output: "standalone",
-  /* config options here */
+  // Standalone output is for local Docker/Node deployments; Vercel uses its own serverless bundler
+  ...(isVercel ? {} : { output: "standalone" }),
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -10,3 +12,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
