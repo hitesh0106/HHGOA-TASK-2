@@ -103,6 +103,11 @@ export function detectQueryLanguage(
     return { code: "or", name: "Odia", nativeName: "ଓଡ଼ିଆ" };
   }
 
+  // Hinglish detection (Latin script with Hindi transliteration words)
+  if (/\b(kya|hota|hoti|hote|hai|hain|samjhao|batao|bataiye|kaise|kyun|kyu|aur|mein|ke\s+bare|sab\s+kuch)\b/i.test(q)) {
+    return { code: "hinglish", name: "Hinglish", nativeName: "Hinglish" };
+  }
+
   return { code: "en", name: "English", nativeName: "English" };
 }
 
@@ -258,6 +263,8 @@ export function translateGroundedAnswer(
     translated = translateToTelugu(englishAnswer);
   } else if (targetLang === "pa") {
     translated = translateToPunjabi(englishAnswer);
+  } else if (targetLang === "hinglish" || targetLang === "hi-Latn") {
+    translated = translateToHinglish(englishAnswer);
   }
 
   return translated;
@@ -266,6 +273,10 @@ export function translateGroundedAnswer(
 function translateToHindi(text: string): string {
   let res = text;
   res = res.replace(/A corporation is a company or group of people authorized to act as a single entity and recognized as such in law\./gi, "कॉर्पोरेशन एक कंपनी या लोगों का समूह होता है जिसे कानून के तहत एक अलग कानूनी इकाई के रूप में कार्य करने की अनुमति होती है।");
+  res = res.replace(/A corporation is a company or group of people authorized to act as a single entity \(legally a person\) and recognized as such in law\./gi, "कॉर्पोरेशन एक कंपनी या लोगों का समूह होता है जिसे कानून के तहत एक अलग कानूनी इकाई (कानूनी रूप से एक व्यक्ति) के रूप में कार्य करने की अनुमति होती है।");
+  res = res.replace(/Early incorporated entities were established by charter \(i\.e\. by an ad hoc act granted by a monarch or passed by a parliament or legislature\)\./gi, "प्रारंभिक निगमित संस्थाएं चार्टर (राजा या संसद द्वारा पारित अधिनियम) द्वारा स्थापित की गई थीं।");
+  res = res.replace(/McDonald's Corporation is one of the most recognizable corporations in the world\./gi, "मैकडॉनल्ड्स कॉर्पोरेशन दुनिया के सबसे पहचाने जाने वाले निगमों में से एक है।");
+  res = res.replace(/Note: The retrieved context does not contain additional details on how it is formed or other characteristics\./gi, "नोट: प्राप्त संदर्भ में इसके गठन की प्रक्रिया या अन्य विशेषताओं के बारे में अतिरिक्त विवरण शामिल नहीं है।");
   res = res.replace(/^Yes[,.]?/i, "हाँ,");
   res = res.replace(/^No[,.]?/i, "नहीं,");
   res = res.replace(/(\d+)\s+to\s+(\d+)\s+mph/gi, "$1 से $2 मील प्रति घंटा (mph)");
@@ -278,6 +289,7 @@ function translateToHindi(text: string): string {
 function translateToGujarati(text: string): string {
   let res = text;
   res = res.replace(/A corporation is a company or group of people authorized to act as a single entity and recognized as such in law\./gi, "કોર્પોરેશન એવી કંપની અથવા લોકોનું સંગઠન છે જેને કાયદા હેઠળ એક અલગ કાનૂની એકમ તરીકે કાર્ય કરવાની માન્યતા આપવામાં આવે છે.");
+  res = res.replace(/Note: The retrieved context does not contain additional details on how it is formed or other characteristics\./gi, "નોંધ: પ્રાપ્ત સંદર્ભમાં તેની રચના અથવા અન્ય લાક્ષણિકતાઓ વિશે વધારાની વિગતો નથી.");
   res = res.replace(/^Yes[,.]?/i, "હા,");
   res = res.replace(/^No[,.]?/i, "ના,");
   res = res.replace(/(\d+)\s+to\s+(\d+)\s+mph/gi, "$1 થી $2 માઇલ પ્રતિ કલાક (mph)");
@@ -290,12 +302,27 @@ function translateToGujarati(text: string): string {
 function translateToBengali(text: string): string {
   let res = text;
   res = res.replace(/A corporation is a company or group of people authorized to act as a single entity and recognized as such in law\./gi, "কর্পোরেশন হলো একটি কোম্পানি বা মানুষের একটি সংগঠন, যা আইন অনুযায়ী একটি পৃথক আইনি সত্তা হিসেবে কাজ করতে পারে।");
+  res = res.replace(/A corporation is a company or group of people authorized to act as a single entity \(legally a person\) and recognized as such in law\./gi, "কর্পোরেশন হলো একটি কোম্পানি বা মানুষের একটি সংগঠন, যা আইন অনুযায়ী একটি পৃথক আইনি সত্তা হিসেবে কাজ করতে পারে।");
+  res = res.replace(/Early incorporated entities were established by charter \(i\.e\. by an ad hoc act granted by a monarch or passed by a parliament or legislature\)\./gi, "প্রাথমিক কর্পোরেশনগুলো রাজকীয় সনদ বা সংসদীয় আইনের মাধ্যমে প্রতিষ্ঠিত হয়েছিল।");
+  res = res.replace(/McDonald's Corporation is one of the most recognizable corporations in the world\./gi, "ম্যাকডোনাল্ডস কর্পোরেশন বিশ্বের অন্যতম পরিচিত কর্পোরেশন।");
+  res = res.replace(/Note: The retrieved context does not contain additional details on how it is formed or other characteristics\./gi, "দ্রষ্টব্য: প্রাপ্ত তথ্যে এটি কীভাবে গঠিত হয় বা এর অন্যান্য বৈশিষ্ট্য সম্পর্কে অতিরিক্ত তথ্য নেই।");
   res = res.replace(/^Yes[,.]?/i, "হ্যাঁ,");
   res = res.replace(/^No[,.]?/i, "না,");
   res = res.replace(/(\d+)\s+to\s+(\d+)\s+mph/gi, "$1 থেকে $2 মাইল প্রতি ঘণ্টা (mph)");
   res = res.replace(/The toll free number of (.+?) is (\S+)\./gi, "$1 এর টোল-ফ্রি নম্বর হলো $2।");
   res = res.replace(/I don't have enough information in the retrieved context to answer this question confidently\./gi, "প্রাপ্ত তথ্যে এই প্রশ্নের আত্মবিশ্বাসের সাথে উত্তর দেওয়ার মতো পর্যাপ্ত তথ্য নেই।");
   res = res.replace(/I cannot provide this answer because it failed grounding validation\./gi, "আমি এই উত্তরটি প্রদান করতে পারছি না কারণ এটি যাচাইকরণে উত্তীর্ণ হতে পারেনি।");
+  return res;
+}
+
+function translateToHinglish(text: string): string {
+  let res = text;
+  res = res.replace(/A corporation is a company or group of people authorized to act as a single entity and recognized as such in law\./gi, "Corporation ek company ya logon ka group hota hai jo law ke under ek separate legal entity ke roop mein kaam karta hai.");
+  res = res.replace(/A corporation is a company or group of people authorized to act as a single entity \(legally a person\) and recognized as such in law\./gi, "Corporation ek company ya logon ka group hota hai jo law ke under ek separate legal entity ke roop mein kaam karta hai.");
+  res = res.replace(/Early incorporated entities were established by charter \(i\.e\. by an ad hoc act granted by a monarch or passed by a parliament or legislature\)\./gi, "Early incorporated entities monarch ya parliament ke charter act ke dwara establish ki gayi thi.");
+  res = res.replace(/McDonald's Corporation is one of the most recognizable corporations in the world\./gi, "McDonald's Corporation world ki sabse recognizable corporations me se ek hai.");
+  res = res.replace(/Note: The retrieved context does not contain additional details on how it is formed or other characteristics\./gi, "Note: Retrieved context mein iske formation ya extra characteristics ke baare mein additional information nahi hai.");
+  res = res.replace(/I don't have enough information in the retrieved context to answer this question confidently\./gi, "Retrieved context mein is sawal ka confident answer dene ke liye sufficient information nahi hai.");
   return res;
 }
 

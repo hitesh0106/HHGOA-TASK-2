@@ -27,7 +27,9 @@ export interface VoiceSelectionResult {
  * (Chrome, Edge, Safari, Firefox) on Windows, macOS, Android, and iOS.
  */
 const FEMALE_VOICE_KEYWORDS = [
-  // High-Quality Indian English & Indic Female Voices
+  // High-Quality Indian English, Hinglish & Indic Female Voices
+  "anika",
+  "anika (elevenlabs)",
   "neerja",
   "swara",
   "heera",
@@ -198,42 +200,46 @@ export function selectBestFemaleVoice(
   return voices[0] || null;
 }
 
+export const ELEVENLABS_VOICE_ID = "UbB19hYD8fvYxwJAVTY5"; // Anika (Sweet, Expressive, Hinglish/Indian English)
+export const ELEVENLABS_VOICE_NAME = "Anika (ElevenLabs)";
+
+let activeAudio: HTMLAudioElement | null = null;
+
 /**
- * Prepares and speaks the answer using a sweet, calm, warm female voice.
- * Automatically cleans citations [C1], [C2], URLs, and technical symbols.
+ * Cleans citations, markdown syntax, URLs, and excessive spaces from text.
  */
-export function speakAnswer(
-  text: string,
-  langCode: string = "en",
-  onEnd?: () => void,
-  onError?: () => void
-): () => void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-    return () => {};
-  }
-
-  window.speechSynthesis.cancel();
-
-  // Clean out citations ([C1], [C2]), markdown syntax, URLs, and excessive spaces
-  const clean = text
+export function cleanTtsText(text: string): string {
+  return text
     .replace(/\[C\d+\]/gi, "")
     .replace(/\[\d+\]/g, "")
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/[*_#`~>]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
 
-  if (!clean) {
+/**
+ * Plays speech using Web Speech API with Anika's sweet, soft female voice preset.
+ */
+function speakWithWebSpeech(
+  cleanText: string,
+  langCode: string = "en",
+  onEnd?: () => void,
+  onError?: () => void
+): () => void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     if (onEnd) onEnd();
     return () => {};
   }
 
-  const utterance = new SpeechSynthesisUtterance(clean);
+  window.speechSynthesis.cancel();
 
-  // Soft, sweet, calm, warm, and natural female voice settings
-  utterance.rate = 0.90; // Slightly slower than default for calm, clear articulation
-  utterance.pitch = 1.10; // Slightly higher natural female pitch (1.05 - 1.15)
-  utterance.volume = 0.75; // Comfortable, gentle volume (0.7 - 0.8)
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+
+  // Soft, sweet, calm, warm, and natural female voice settings (Anika profile)
+  utterance.rate = 0.95; // Slightly slower, serene and composed
+  utterance.pitch = 1.10; // Sweet higher natural female pitch
+  utterance.volume = 0.85; // Comfortable, gentle volume
 
   const applyVoiceAndSpeak = () => {
     const voices = window.speechSynthesis.getVoices();
@@ -257,7 +263,6 @@ export function speakAnswer(
     window.speechSynthesis.speak(utterance);
   };
 
-  // If voices are already loaded, speak immediately. Otherwise wait for onvoiceschanged.
   const currentVoices = window.speechSynthesis.getVoices();
   if (currentVoices && currentVoices.length > 0) {
     applyVoiceAndSpeak();
@@ -266,7 +271,6 @@ export function speakAnswer(
       window.speechSynthesis.onvoiceschanged = null;
       applyVoiceAndSpeak();
     };
-    // Fallback if event doesn't fire
     setTimeout(() => {
       if (!window.speechSynthesis.speaking) {
         applyVoiceAndSpeak();
@@ -276,5 +280,102 @@ export function speakAnswer(
 
   return () => {
     window.speechSynthesis.cancel();
+  };
+}
+
+/**
+ * Prepares and speaks the answer using ElevenLabs Anika voice (UbB19hYD8fvYxwJAVTY5)
+ * with seamless fallback to client-side sweet natural female speech synthesis.
+ */
+export function speakAnswer(
+  text: string,
+  langCode: string = "en",
+  onEnd?: () => void,
+  onError?: () => void
+): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  // Cancel any existing playback
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio.currentTime = 0;
+    activeAudio = null;
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+
+  const clean = cleanTtsText(text);
+  if (!clean) {
+    if (onEnd) onEnd();
+    return () => {};
+  }
+
+  let isCancelled = false;
+  let webSpeechCancel: (() => void) | null = null;
+
+  // 1. Try ElevenLabs API endpoint first for neural Anika voice (UbB19hYD8fvYxwJAVTY5)
+  fetch("/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: clean,
+      voiceId: ELEVENLABS_VOICE_ID,
+    }),
+  })
+    .then(async (res) => {
+      if (isCancelled) return;
+
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("audio/mpeg")) {
+        const blob = await res.blob();
+        if (isCancelled) return;
+
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        activeAudio = audio;
+
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          activeAudio = null;
+          if (onEnd) onEnd();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(audioUrl);
+          activeAudio = null;
+          // Fall back to Web Speech on audio playback error
+          webSpeechCancel = speakWithWebSpeech(clean, langCode, onEnd, onError);
+        };
+
+        audio.play().catch(() => {
+          // If browser autoplay policy blocks audio.play, fall back to Web Speech
+          webSpeechCancel = speakWithWebSpeech(clean, langCode, onEnd, onError);
+        });
+      } else {
+        // Fall back to sweet Anika voice preset on Web Speech API
+        webSpeechCancel = speakWithWebSpeech(clean, langCode, onEnd, onError);
+      }
+    })
+    .catch(() => {
+      if (!isCancelled) {
+        webSpeechCancel = speakWithWebSpeech(clean, langCode, onEnd, onError);
+      }
+    });
+
+  return () => {
+    isCancelled = true;
+    if (activeAudio) {
+      activeAudio.pause();
+      activeAudio.currentTime = 0;
+      activeAudio = null;
+    }
+    if (webSpeechCancel) {
+      webSpeechCancel();
+    }
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   };
 }

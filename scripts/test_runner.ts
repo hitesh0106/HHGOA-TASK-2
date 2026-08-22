@@ -241,6 +241,147 @@ runTest("getCanonicalBenchmarkQueries is deterministic", () => {
 });
 
 console.log("\n==================================================");
+console.log("RUNNING SUITE 6: DATASET INTEGRITY & DEDUPLICATION");
+console.log("==================================================");
+
+import {
+  normalizeForDeduplication,
+  checkDatasetIntegrity,
+  groupQueryRecords,
+} from "../src/lib/benchmarks/deduplication";
+import type { BenchmarkQueryRecord } from "../src/lib/benchmarks/runner";
+
+runTest("detects exact duplicates after normalization", () => {
+  const norm1 = normalizeForDeduplication("what is a corporation");
+  const norm2 = normalizeForDeduplication("what is a corporation");
+  assert.equal(norm1, norm2);
+  assert.equal(norm1, "what is a corporation");
+});
+
+runTest("detects duplicates with extra/irregular whitespace", () => {
+  const norm1 = normalizeForDeduplication("what is a corporation");
+  const norm2 = normalizeForDeduplication("   what   is   a    corporation   \n\t ");
+  assert.equal(norm1, norm2);
+});
+
+runTest("detects duplicates with different capitalization", () => {
+  const norm1 = normalizeForDeduplication("what is a corporation");
+  const norm2 = normalizeForDeduplication("What Is A CORPORATION");
+  assert.equal(norm1, norm2);
+});
+
+runTest("detects punctuation-normalized duplicates", () => {
+  const norm1 = normalizeForDeduplication("what is a corporation");
+  const norm2 = normalizeForDeduplication("... what is a corporation???");
+  const norm3 = normalizeForDeduplication('"What is a corporation?"');
+  assert.equal(norm1, norm2);
+  assert.equal(norm1, norm3);
+});
+
+runTest("preserves semantically similar but genuinely different queries", () => {
+  const q1 = normalizeForDeduplication("what is a corporation");
+  const q2 = normalizeForDeduplication("explain what a corporation is in detail");
+  const q3 = normalizeForDeduplication("why is a corporation considered a separate legal entity");
+  const q4 = normalizeForDeduplication("what is a corporate");
+
+  assert.notEqual(q1, q2);
+  assert.notEqual(q1, q3);
+  assert.notEqual(q1, q4);
+  assert.notEqual(q2, q3);
+
+  const report = checkDatasetIntegrity([
+    { query: "what is a corporation", expectedOutcome: "Answer" },
+    { query: "explain what a corporation is in detail", expectedOutcome: "Answer" },
+    { query: "why is a corporation considered a separate legal entity", expectedOutcome: "Answer" },
+    { query: "what is a corporate", expectedOutcome: "Answer" },
+  ]);
+  assert.equal(report.totalQueries, 4);
+  assert.equal(report.uniqueNormalizedQueries, 4);
+  assert.equal(report.duplicateCount, 0);
+});
+
+runTest("flags same query appearing in answerable and unanswerable sets as conflict", () => {
+  const report = checkDatasetIntegrity([
+    { id: 1, query: "What is a corporation?", expectedOutcome: "Answer", category: "ground_truth" },
+    { id: 2, query: "what is a corporation", expectedOutcome: "Abstention", category: "abstention" },
+  ]);
+
+  assert.equal(report.hasConflicts, true);
+  assert.equal(report.conflicts.length, 1);
+  assert.equal(report.conflicts[0].normalizedQuery, "what is a corporation");
+  assert.deepEqual(report.conflicts[0].answerableIndices, [1]);
+  assert.deepEqual(report.conflicts[0].unanswerableIndices, [2]);
+});
+
+runTest("groupQueryRecords groups repeated runs without losing data or falsifying metrics", () => {
+  const rawRuns: BenchmarkQueryRecord[] = [
+    {
+      queryIndex: 1,
+      query: "What is a corporation?",
+      language: "en",
+      category: "ground_truth",
+      guardrailsMs: 0.1,
+      retrievalMs: 1.2,
+      generationMs: 0.8,
+      totalMs: 2.1,
+      outcome: "Answer",
+      grounded: true,
+      hasCitation: true,
+      confidence: "high",
+      blocked: false,
+      answer: "A corporation is a company authorized to act as a single entity.",
+      topScore: 0.9,
+      overBudget: false,
+    },
+    {
+      queryIndex: 2,
+      query: "what is a corporation",
+      language: "en",
+      category: "ground_truth",
+      guardrailsMs: 0.2,
+      retrievalMs: 1.4,
+      generationMs: 0.9,
+      totalMs: 2.5,
+      outcome: "Answer",
+      grounded: true,
+      hasCitation: true,
+      confidence: "high",
+      blocked: false,
+      answer: "A corporation is a company authorized to act as a single entity.",
+      topScore: 0.9,
+      overBudget: false,
+    },
+    {
+      queryIndex: 3,
+      query: "  WHAT IS A CORPORATION?  ",
+      language: "en",
+      category: "ground_truth",
+      guardrailsMs: 0.15,
+      retrievalMs: 1.3,
+      generationMs: 0.85,
+      totalMs: 2.3,
+      outcome: "Answer",
+      grounded: true,
+      hasCitation: true,
+      confidence: "high",
+      blocked: false,
+      answer: "A corporation is a company authorized to act as a single entity.",
+      topScore: 0.9,
+      overBudget: false,
+    },
+  ];
+
+  const grouped = groupQueryRecords(rawRuns);
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].runCount, 3);
+  assert.equal(grouped[0].runs.length, 3);
+  assert.equal(grouped[0].displayQuery, "What is a corporation?");
+  assert.equal(grouped[0].avgTotalMs, (2.1 + 2.5 + 2.3) / 3);
+  assert.equal(grouped[0].groundedRate, 100);
+  assert.equal(grouped[0].consensusOutcome, "Answer");
+});
+
+console.log("\n==================================================");
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
 console.log("==================================================\n");
 

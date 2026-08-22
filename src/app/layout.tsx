@@ -65,6 +65,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`${sans.variable} ${serif.variable} ${mono.variable} antialiased bg-background text-foreground min-h-screen`}
       >
         <ThemeProvider
