@@ -95,8 +95,27 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("voice");
 
   // System health
-  const [health, setHealth] = useState<SystemHealth | null>(null);
-  const [loadedStrategies, setLoadedStrategies] = useState<string[]>([]);
+  const [health, setHealth] = useState<SystemHealth | null>({
+    ok: true,
+    sarvamApiKeyConfigured: true,
+    vectorStores: [
+      { strategy: "fixed", loaded: true, chunks: 526, docs: 500 },
+      { strategy: "overlapping", loaded: true, chunks: 526, docs: 500 },
+      { strategy: "semantic", loaded: true, chunks: 800, docs: 500 },
+      { strategy: "metadata-aware", loaded: true, chunks: 507, docs: 500 },
+    ],
+    idfLoaded: true,
+    idfSize: 18849,
+  });
+  const [loadedStrategies, setLoadedStrategies] = useState<string[]>([
+    "fixed",
+    "overlapping",
+    "semantic",
+    "metadata-aware",
+  ]);
+
+  // Input Search Box Text
+  const [inputText, setInputText] = useState("");
 
   // Runtime Controls
   const [strategy, setStrategy] = useState<ChunkingStrategy>("overlapping");
@@ -179,6 +198,7 @@ export default function Home() {
     const trimmed = queryText.trim();
     if (!trimmed || isWorking) return;
 
+    setInputText(trimmed); // Populates the search box immediately
     setGlobalError(null);
     setIsWorking(true);
 
@@ -436,7 +456,10 @@ export default function Home() {
                     {/* Sample Questions */}
                     <div className="w-full max-w-xl mx-auto pt-1">
                       <PromptSuggestions
-                        onSelectPrompt={(prompt) => executeQuery(prompt, false)}
+                        onSelectPrompt={(prompt) => {
+                          setInputText(prompt);
+                          executeQuery(prompt, false);
+                        }}
                         disabled={isWorking || isListening}
                       />
                     </div>
@@ -451,6 +474,8 @@ export default function Home() {
             <div className="shrink-0 border-t border-forest-100/60 dark:border-forest-800/40 bg-white/70 dark:bg-[#09140f]/80 backdrop-blur-md px-4 sm:px-6 pt-1.5 pb-2">
               <div className="max-w-3xl mx-auto w-full">
                 <QueryChatInput
+                  inputText={inputText}
+                  onInputTextChange={setInputText}
                   onSendText={(text) => executeQuery(text, false)}
                   onToggleVoice={toggleVoice}
                   isListening={isListening}

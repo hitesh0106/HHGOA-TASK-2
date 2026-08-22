@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev --webpack -p 3000",
     "build": "next build && node -e \"const fs=require('fs'); fs.cpSync('.next/static', '.next/standalone/.next/static', {recursive:true, force:true}); fs.cpSync('public', '.next/standalone/public', {recursive:true, force:true});\"",
     "start": "next start -p 3000",
     "start:standalone": "node .next/standalone/server.js",

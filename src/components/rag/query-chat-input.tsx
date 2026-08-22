@@ -16,6 +16,8 @@ import { CHUNKING_STRATEGIES, CHUNKING_DESCRIPTIONS, type ChunkingStrategy } fro
 import { SUPPORTED_LANGUAGES, type RagEngine, type SttMode } from "./chunking-selector";
 
 interface QueryChatInputProps {
+  inputText?: string;
+  onInputTextChange?: (text: string) => void;
   onSendText: (query: string) => void;
   onToggleVoice: () => void;
   isListening: boolean;
@@ -36,6 +38,8 @@ interface QueryChatInputProps {
 }
 
 export function QueryChatInput({
+  inputText,
+  onInputTextChange,
   onSendText,
   onToggleVoice,
   isListening,
@@ -54,8 +58,19 @@ export function QueryChatInput({
   hasMessages = false,
   disabled = false,
 }: QueryChatInputProps) {
-  const [text, setText] = useState("");
+  const [internalText, setInternalText] = useState("");
+  const text = inputText !== undefined ? inputText : internalText;
+  const setText = (val: string) => {
+    if (onInputTextChange) onInputTextChange(val);
+    else setInternalText(val);
+  };
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    if (inputText && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [inputText]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

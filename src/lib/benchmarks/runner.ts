@@ -31,6 +31,15 @@ import {
 import { CHUNKING_STRATEGIES, type ChunkingStrategy } from "../chunking";
 import { getAllLoadedStrategies } from "../vector-db";
 
+import {
+  checkDatasetIntegrity,
+  groupQueryRecords,
+  type DatasetIntegrityReport,
+  type GroupedQueryRecord,
+} from "./deduplication";
+
+export type { DatasetIntegrityReport, GroupedQueryRecord };
+
 // ---------------------------------------------------------------------------
 // Unified Types
 // ---------------------------------------------------------------------------
@@ -95,6 +104,8 @@ export interface BenchmarkStrategyResult {
     }
   >;
   rawRecords: BenchmarkQueryRecord[];
+  groupedRecords: GroupedQueryRecord[];
+  integrityReport?: DatasetIntegrityReport;
 }
 
 export interface UnifiedBenchmarkReport {
@@ -110,6 +121,7 @@ export interface UnifiedBenchmarkReport {
   };
   summary: {
     totalQueries: number;
+    uniqueQueries: number;
     strategiesEvaluated: number;
     engine: "fast" | "sarvam";
     budgetMs: number;
@@ -124,6 +136,7 @@ export interface UnifiedBenchmarkReport {
     groundingRate: number;
     citationAccuracy: number;
   };
+  integrityReport: DatasetIntegrityReport;
   results: BenchmarkStrategyResult[];
   notes: string[];
 }
@@ -165,6 +178,9 @@ export async function runBenchmarkSuite(
   // Generate canonical query pool
   const queries: CanonicalBenchmarkQuery[] =
     config.queries ?? getCanonicalBenchmarkQueries(queryCount);
+
+  // Pre-evaluation dataset integrity check
+  const integrityReport = checkDatasetIntegrity(queries);
 
   // Generate unique run ID and timestamp
   const now = new Date();
@@ -288,6 +304,8 @@ export async function runBenchmarkSuite(
         ? (citationPositiveCount / rawRecords.length) * 100
         : 100;
 
+    const groupedRecords = groupQueryRecords(rawRecords);
+
     strategyResults.push({
       strategy,
       chunkCount: 526, // canonical size for standard index
@@ -307,6 +325,8 @@ export async function runBenchmarkSuite(
       slaPass,
       languageBreakdown,
       rawRecords,
+      groupedRecords,
+      integrityReport,
     });
   }
 
@@ -338,6 +358,7 @@ export async function runBenchmarkSuite(
     },
     summary: {
       totalQueries: queries.length,
+      uniqueQueries: integrityReport.uniqueNormalizedQueries,
       strategiesEvaluated: targetStrategies.length,
       engine,
       budgetMs,
@@ -352,9 +373,11 @@ export async function runBenchmarkSuite(
       groundingRate: primaryResult.groundingRate,
       citationAccuracy: primaryResult.citationAccuracy,
     },
+    integrityReport,
     results: strategyResults,
     notes: [
       `Benchmark Run ID: ${benchmark_run_id} executed at ${timestamp}.`,
+      `Dataset Integrity: ${integrityReport.totalQueries} total queries (${integrityReport.uniqueNormalizedQueries} unique, ${integrityReport.duplicateCount} repeated instances grouped).`,
       `Warm-up phase: ${warmupCount} queries run and discarded.`,
       `Evaluation: ${queries.length} queries × ${targetStrategies.length} strategy(ies) using "${engine}" engine.`,
       `SLA Criteria: P95 <= ${budgetMs}ms (${allSlaPass ? "PASSED" : "FAILED"}).`,

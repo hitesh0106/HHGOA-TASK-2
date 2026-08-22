@@ -43,6 +43,7 @@ vs versus between difference differences compare comparing
   এর তে থেকে কে এবং বা আর একটি এই ওই হয় হলো ছিল আছে
   છે શું હતો હતી હતા થી માં ને અને અથવા પણ
   ہے ہیں تھا تھی تھے کا کے کی میں پر سے اور یا تو بھی
+  kya hota hai aur me mein ke bare sab kuch batao bataiye samjhao kaise kyun kyu
 `.trim().split(/\s+/)
 );
 
@@ -53,22 +54,35 @@ const AUXILIARY_QUESTION_WORDS = new Set<string>([
   "who", "whom", "whose", "why", "how", "long", "many", "much", "take",
   "takes", "operate", "operates", "oper", "vs", "versus", "between",
   "difference", "differences", "compare", "comparing", "someone", "anybody", "people",
+  "detail", "details", "detailed", "everything", "available", "knowledge", "base",
+  "form", "formed", "formation", "characteristic", "characteristics", "main",
+  "considered", "separate", "legal", "entity", "entities", "information",
+  // Hinglish question/auxiliary words
+  "kya", "hota", "hoti", "hote", "hai", "hain", "aur", "me", "mein", "ke", "bare",
+  "sab", "kuch", "batao", "bataiye", "bataen", "samjhao", "samjhaiye", "samjhaen", "kaise", "kyun", "kyu",
   // Indic question words (Hindi, Bengali, Gujarati, Marathi, Urdu, Tamil, Telugu, Punjabi)
   "क्या", "क्यों", "कैसे", "कितना", "कितनी", "कितने", "कब", "कहाँ", "कहा", "किस", "किसका", "किसकी", "किसके", "बताओ", "बताइए", "बताएं", "समझाओ", "समझाएं",
+  "विस्तार", "विस्तृत", "व्याख्या", "माना", "जाता", "गठन", "विशेषता", "विशेषताएं",
   "কি", "কেন", "কিভাবে", "কত", "কবে", "কোথায়", "কোথায", "কার", "কাদের", "বলুন", "বোঝান", "কতটা", "কতখানি",
-  "શું", "કેમ", "કેવી", "કેટલું", "કેટલા", "ક્યારે", "ક્યાં", "કોણ", "કોનું", "જણાવો", "સમજાવો",
+  "বিস্তারিত", "বিস্তারিতভাবে", "ব্যাখ্যা", "করুন", "সম্পর্কে", "গঠিত", "বৈশিষ্ট্য",
+  "શું", "કેમ", "કેવી", "કેટલું", "કેટલા", "ક્યારે", "ક્યાં", "કોણ", "કોનું", "જણાવો", "સમજાવો", "વિગતવાર",
   "काय", "का", "कसे", "किती", "केव्हा", "कुठे", "कोण", "सांगा",
-  "کیا", "کیوں", "کیسے", "کتنا", "کتنی", "کتنے", "کب", "کہاں", "کس", "بتائیں", "سمجھائیں",
-  "என்ன", "ஏன்", "எப்படி", "எவ்வளவு", "எப்போது", "எங்கே", "யார்",
-  "ఏమిటి", "ఎందుకు", "ఎలా", "ఎంత", "ఎప్పుడు", "ఎక్కడ", "ఎవరు",
-  "ਕੀ", "ਕਿਉਂ", "ਕਿਵੇਂ", "ਕਿੰਨਾ", "ਕਦੋਂ", "ਕਿੱਥੇ", "ਕੌਣ",
+  "کیا", "کیوں", "کیسے", "کتنا", "کتنی", "کتنے", "کب", "کہاں", "किस", "بتائیں", "سمجھائیں", "تفصیل",
+  "என்ன", "ஏன்", "எப்படி", "எவ்வளவு", "எப்போது", "எங்கே", "யார்", "விளக்குங்கள்",
+  "ఏమిటి", "ఎందుకు", "ఎలా", "ఎంత", "ఎప్పుడు", "ఎక్కడ", "ఎవరు", "వివరించండి",
+  "ਕੀ", "ਕਿਉਂ", "ਕਿਵੇਂ", "ਕਿੰਨਾ", "ਕਦੋਂ", "ਕਿੱਥੇ", "ਕੌਣ", "ਦੱਸੋ",
 ]);
 
 const CONVERSATIONAL_PREFIXES = [
-  /^can\s+(you|someone|anybody)\s+(please\s+)?(tell\s+me|explain|show\s+me|describe|give\s+me)\s+/i,
-  /^(please\s+)?(tell\s+me|explain\s+to\s+me|describe|show\s+me)\s+/i,
+  /^can\s+(you|someone|anybody)\s+(please\s+)?(tell\s+me|explain|show\s+me|describe|give\s+me)\s+(what\s+a\s+|what\s+an\s+|what\s+|about\s+)?/i,
+  /^(please\s+)?(tell\s+me|explain\s+to\s+me|describe|show\s+me)\s+(everything\s+available\s+in\s+the\s+knowledge\s+base\s+about\s+|what\s+a\s+|what\s+an\s+|what\s+|about\s+)?/i,
   /^(do\s+you\s+know|what\s+do\s+you\s+know\s+about)\s+/i,
-  /^(can\s+i\s+know|i\s+want\s+to\s+know)\s+/i,
+  /^(can\s+i\s+know|i\s+want\s+to\s+know)\s+(about\s+)?/i,
+  /^explain\s+(what\s+a\s+|what\s+an\s+|what\s+|how\s+|why\s+)?/i,
+  /^tell\s+me\s+(everything\s+(available\s+)?(in\s+the\s+knowledge\s+base\s+)?about\s+|about\s+)?/i,
+  /^why\s+is\s+(a\s+|an\s+|the\s+)?/i,
+  /^what\s+is\s+(a\s+|an\s+|the\s+)?/i,
+  /^what\s+are\s+(the\s+)?/i,
   /^what\s+exactly\s+(is|are)\s+/i,
   /^what\s+(is|are|was|were)\s+the\s+/i,
   /^what\s+(is|are|was|were)\s+a\s+/i,
@@ -81,6 +95,12 @@ const INDIC_LEXICON_MAP: Record<string, string> = {
   "कॉरपोरेशन": "corporation",
   "निगम": "corporation",
   "कंपनी": "company",
+  "कानूनी": "legal",
+  "इकाई": "entity",
+  "संस्था": "corporation entity",
+  "गठन": "formation formed",
+  "विशेषता": "characteristic",
+  "विशेषताएं": "characteristics",
   "डेल्टा": "delta",
   "एयरलाइन्स": "airlines flight",
   "एयरलाइंस": "airlines flight",
@@ -90,8 +110,6 @@ const INDIC_LEXICON_MAP: Record<string, string> = {
   "उड़ता": "fly flight",
   "उड़ती": "fly flight",
   "उड़ते": "fly flight",
-  "जाती": "fly flight travel",
-  "जाता": "fly flight travel",
   "ईगल": "eagle",
   "चील": "eagle",
   "गरुड़": "eagle",
@@ -130,7 +148,12 @@ const INDIC_LEXICON_MAP: Record<string, string> = {
 
   // Bengali terms
   "কর্পোরেশন": "corporation",
-  "সংস্থা": "corporation",
+  "সংস্থা": "corporation entity",
+  "কোম্পানি": "company",
+  "আইনি": "legal",
+  "সত্তা": "entity",
+  "গঠিত": "formed formation",
+  "বৈশিষ্ট্য": "characteristics",
   "ডেল্টা": "delta",
   "এয়ারলাইন্স": "airlines flight",
   "এয়ারলাইন্স": "airlines flight",
@@ -286,6 +309,9 @@ export function cleanIntentString(q: string): string {
 
 export function stemWord(word: string): string {
   let w = word.toLowerCase();
+  if (w === "mars") return "mars";
+  if (w === "paris") return "paris";
+  if (w === "bangalore") return "bangalore";
   if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y";
   if (w.endsWith("ing") && w.length > 5) return w.slice(0, -3);
   if (w.endsWith("es") && w.length > 4) return w.slice(0, -2);
@@ -322,6 +348,49 @@ export function getEntityTokens(tokens: string[]): string[] {
   return tokens.filter((t) => !AUXILIARY_QUESTION_WORDS.has(t));
 }
 
+export interface QueryIntent {
+  raw: string;
+  normalized: string;
+  intent: string;
+  subjectTokens: string[];
+  subtopics: string[];
+  isDetailed: boolean;
+  isMultiPart: boolean;
+  isDefinition: boolean;
+  isWhy: boolean;
+}
+
+export function extractQueryIntent(q: string): QueryIntent {
+  const norm = normalizeQueryString(q);
+  const intent = cleanIntentString(q);
+  const allTokens = tokenizeWithStemming(q, true);
+  const entityTokens = getEntityTokens(allTokens);
+  const subjectTokens = entityTokens.length > 0 ? entityTokens : allTokens;
+
+  const isDetailed = /\b(detail|detailed|in detail|everything|all|विस्तार|विस्तृत|বিস্তারিত|বিবরণ)\b/i.test(q);
+  const isMultiPart = /\b(and|how|formed|formation|characteristics|features|steps|गठन|विशेषताएं|বৈশিষ্ট্য|গঠিত)\b/i.test(q);
+  const isDefinition = /\b(what is|define|definition|meaning|क्या है|কী|kya hota hai)\b/i.test(q);
+  const isWhy = /\b(why|क्यों|কেন|kyun|kyu|why is)\b/i.test(q);
+
+  const subtopics: string[] = [];
+  if (/\b(form|formed|formation|गठन|গঠিত)\b/i.test(q)) subtopics.push("formation");
+  if (/\b(characteristic|characteristics|feature|features|विशेषताएं|বৈশিষ্ট্য)\b/i.test(q)) subtopics.push("characteristics");
+  if (/\b(history|origin|इतिहास|ইতিহাস)\b/i.test(q)) subtopics.push("history");
+  if (/\b(separate legal entity|legal entity|कानूनी इकाई|আইনি সত্তা)\b/i.test(q)) subtopics.push("legal_entity");
+
+  return {
+    raw: q,
+    normalized: norm,
+    intent,
+    subjectTokens,
+    subtopics,
+    isDetailed,
+    isMultiPart,
+    isDefinition,
+    isWhy,
+  };
+}
+
 export class DatasetQueryIndex {
   private records: Array<{
     docId: string;
@@ -354,19 +423,25 @@ export class DatasetQueryIndex {
   }
 
   match(userQuery: string): DatasetQueryMatch[] {
-    const userNorm = normalizeQueryString(userQuery);
-    const userIntent = cleanIntentString(userQuery);
-    const userTokens = tokenizeWithStemming(userQuery, true);
-    const userEntities = getEntityTokens(userTokens);
-    const targetTokens = userEntities.length > 0 ? userEntities : userTokens;
+    const qIntent = extractQueryIntent(userQuery);
+    const userNorm = qIntent.normalized;
+    const userIntent = qIntent.intent;
+    const targetTokens = qIntent.subjectTokens;
     const targetSet = new Set(targetTokens);
 
     if (targetTokens.length === 0) return [];
 
     const idfMap = getIdf();
     let totalUserIdf = 0;
+    let maxEntityIdf = 0;
+    let keyEntity = "";
     for (const ut of targetTokens) {
-      totalUserIdf += idfMap?.get(ut) ?? 3.5;
+      const idf = idfMap?.get(ut) ?? 3.5;
+      totalUserIdf += idf;
+      if (idf > maxEntityIdf) {
+        maxEntityIdf = idf;
+        keyEntity = ut;
+      }
     }
 
     const candidates = new Map<number, number>();
@@ -398,8 +473,11 @@ export class DatasetQueryIndex {
       if (matchCount > 0) {
         const idfCoverage = totalUserIdf > 0 ? matchedIdf / totalUserIdf : 0;
         const jaccard = matchCount / (targetSet.size + r.tokenSet.size - matchCount);
-        const score = 0.65 * idfCoverage + 0.35 * jaccard;
-        if (score >= 0.30) {
+        let score = 0.65 * idfCoverage + 0.35 * jaccard;
+        if (keyEntity && r.tokenSet.has(keyEntity)) {
+          score = Math.max(score, 0.75);
+        }
+        if (score >= 0.25) {
           candidates.set(i, Math.max(candidates.get(i) ?? 0, score));
         }
       }

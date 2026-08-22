@@ -28,6 +28,7 @@ import {
   getDatasetQueryIndex,
   tokenizeWithStemming,
   getEntityTokens,
+  extractQueryIntent,
   type DatasetDocument,
 } from "./dataset-index";
 
@@ -264,9 +265,8 @@ class VectorStore {
     }
     const t0 = performance.now();
 
-    const qTokens = tokenizeWithStemming(queryText, true);
-    const qEntities = getEntityTokens(qTokens);
-    const targetTokens = qEntities.length > 0 ? qEntities : qTokens;
+    const qIntent = extractQueryIntent(queryText);
+    const targetTokens = qIntent.subjectTokens;
 
     const idfMap = getIdf();
     let totalUserIdf = 0;
@@ -306,29 +306,32 @@ class VectorStore {
       const chunkTokenSet = this.chunkTokenSets[i] ?? new Set();
 
       let matchedIdf = 0;
-      let missingEntityCount = 0;
+      let matchedCount = 0;
       for (const qt of targetTokens) {
         if (chunkTokenSet.has(qt)) {
           matchedIdf += idfMap?.get(qt) ?? 3.5;
-        } else {
-          missingEntityCount++;
+          matchedCount++;
         }
       }
 
       const idfCoverage = totalUserIdf > 0 ? matchedIdf / totalUserIdf : 0;
+      const hasKeyEntity = keyEntity ? chunkTokenSet.has(keyEntity) : false;
 
-      // Hard entity constraint: if query has a distinctive entity (IDF >= 4.0, e.g. stubhub, rachel, cantaloupe, stool)
+      // Hard entity constraint: if query has a distinctive entity (IDF >= 4.0, e.g. stubhub, rachel, cantaloupe)
       // and candidate document is missing this key entity, discard it (0.0)!
-      if (maxEntityIdf >= 4.0 && !chunkTokenSet.has(keyEntity)) {
+      if (maxEntityIdf >= 4.0 && !hasKeyEntity) {
         fusedScores[i] = 0.0;
         continue;
       }
 
-      // Relevance penalty for multi-token queries with weak coverage
-      if (
-        targetTokens.length >= 2 &&
-        (idfCoverage < 0.55 || (missingEntityCount >= targetTokens.length - 1 && idfCoverage < 0.70))
-      ) {
+      // If document matches zero target tokens, discard it (0.0)
+      if (matchedCount === 0) {
+        fusedScores[i] = 0.0;
+        continue;
+      }
+
+      // Relevance scaling: if key entity is present, allow retrieval even for detailed/multi-part phrasing
+      if (!hasKeyEntity && targetTokens.length >= 2 && idfCoverage < 0.45) {
         fusedScores[i] = 0.0;
         continue;
       }
@@ -343,8 +346,10 @@ class VectorStore {
       const queryMatchScore = docQueryScores.get(c.doc_id) ?? 0;
       const normVec = Math.max(0, vecScore);
 
-      // Score fusion formula: BM25 (45%) + Dataset Query Match (50%) + Vector (5%), scaled by coverage
-      const combined = (0.45 * normBm + 0.50 * queryMatchScore + 0.05 * normVec) * idfCoverage;
+      const effectiveCoverage = hasKeyEntity ? Math.max(0.75, idfCoverage) : idfCoverage;
+
+      // Score fusion formula: BM25 (45%) + Dataset Query Match (45%) + Vector (10%), scaled by coverage
+      const combined = (0.45 * normBm + 0.45 * queryMatchScore + 0.10 * normVec) * effectiveCoverage;
       fusedScores[i] = combined;
     }
 

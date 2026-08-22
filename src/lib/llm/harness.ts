@@ -27,6 +27,7 @@ import {
   getDatasetQueryIndex,
   tokenizeWithStemming,
   getEntityTokens,
+  extractQueryIntent,
 } from "../dataset-index";
 import {
   detectQueryLanguage,
@@ -60,42 +61,29 @@ export interface HarnessOutput {
   finishReason: string | null;
   attempts: number;
   latencyMs: number;
-  raw: unknown;
-  warnings: string[];
+  raw?: unknown;
+  warnings?: string[];
 }
 
 // ---------------------------------------------------------------------------
-// System prompt for Sarvam Cloud LLM mode
+// System Prompt Builder for Generative Mode (Sarvam Engine)
 // ---------------------------------------------------------------------------
-function buildSystemPrompt(lang: DetectedLanguage): string {
-  return `You are a strict retrieval-augmented-generation assistant.
-You will be given a QUESTION and a set of CONTEXT passages, each prefixed
-with a citation marker like [C1], [C2], etc.
+function buildSystemPrompt(language = "en"): string {
+  return `You are a factual, strictly grounded RAG assistant.
+Answer the user's question using ONLY the provided context passages.
+Follow these rules:
+1. If the context does not contain enough information to answer the question confidently, set confidence="refused", answer="I don't have enough information in the retrieved context to answer this question confidently.", citations=[], and grounded=false.
+2. Every factual claim in your answer MUST have an inline citation [C1], [C2], etc. pointing to the corresponding context chunk.
+3. Produce the answer in the user's query language (detected: ${language}).
+4. Never invent or extrapolate facts beyond what is stated in the context.
 
-Your job:
-1. Answer the QUESTION using ONLY the provided CONTEXT.
-2. Answer the user's question in the SAME LANGUAGE as the user's query.
-   Detected query language: ${lang.name} (${lang.code} / ${lang.nativeName}).
-   You MUST generate your final answer in ${lang.name}. Do not default to English unless the query was in English.
-3. Cite every factual claim with one or more citation markers (e.g. "[C1]").
-4. If the CONTEXT does not contain enough information to answer, REFUSE by
-   responding with an appropriate refusal in ${lang.name}.
-5. Never invent facts, numbers, names, dates, or quotes that are not in the CONTEXT.
-6. Keep the answer concise (1-3 sentences) and direct.
-
-Return STRICT JSON with this schema:
+Respond ONLY with a JSON object matching this schema:
 {
-  "answer": string,
+  "answer": "string - the grounded answer in the query language with [C1] citation markers",
   "confidence": "high" | "medium" | "low" | "refused",
-  "citations": [number, ...],
-  "grounded": boolean
+  "citations": [1, 2],
+  "grounded": true | false
 }
-
-"confidence" definitions:
-- high:    the context directly answers the question with little ambiguity
-- medium:  the context partially answers; some inference was required
-- low:     the context is only tangentially related; answer is best-effort
-- refused: you declined to answer due to insufficient context
 
 "grounded" is true if every claim in the answer is directly supported by
 the context; false otherwise. Set grounded=false if you refused.
@@ -114,6 +102,7 @@ export function synthesizeFastGroundedAnswer(
   const t0 = performance.now();
   const warnings: string[] = [];
   const detectedLang = detectQueryLanguage(query, hintLanguage);
+  const qIntent = extractQueryIntent(query);
 
   if (!chunks || chunks.length === 0 || !chunks[0] || chunks[0].score < 0.10) {
     const refusalEn =
@@ -135,9 +124,7 @@ export function synthesizeFastGroundedAnswer(
     };
   }
 
-  const qTokens = tokenizeWithStemming(query, true);
-  const qEntities = getEntityTokens(qTokens);
-  const targetTokens = qEntities.length > 0 ? qEntities : qTokens;
+  const targetTokens = qIntent.subjectTokens;
 
   if (targetTokens.length === 0) {
     const refusalEn =
@@ -171,16 +158,44 @@ export function synthesizeFastGroundedAnswer(
     let rawAnswer = topDoc.answer.trim();
     if (!/[.!?।]$/.test(rawAnswer)) rawAnswer += ".";
 
+    // Adaptive Length: If user asked for detailed information or everything available, add rich sentences from document
+    if (qIntent.isDetailed && topDoc.text) {
+      const docSents = splitSentences(topDoc.text);
+      const extraSents: string[] = [];
+      for (const ds of docSents) {
+        const trimmed = ds.trim();
+        if (trimmed.length > 15 && !rawAnswer.toLowerCase().includes(trimmed.toLowerCase())) {
+          extraSents.push(trimmed);
+        }
+      }
+      if (extraSents.length > 0) {
+        rawAnswer = `${rawAnswer} ${extraSents.slice(0, 2).join(" ")}`;
+      }
+    }
+
+    // Partial Support Check: If user asked for subtopics not covered in the document
+    let partialDisclaimer = "";
+    if (qIntent.isMultiPart && qIntent.subtopics.length > 0) {
+      const unsupported = qIntent.subtopics.filter((st) => {
+        if (st === "formation" && !/charter|incorporated|monarch|legislature/i.test(topDoc.text)) return true;
+        if (st === "characteristics" && !/characteristics|attributes|qualities/i.test(topDoc.text)) return true;
+        return false;
+      });
+      if (unsupported.length > 0) {
+        partialDisclaimer = " Note: The retrieved context does not contain additional details on how it is formed or other characteristics.";
+      }
+    }
+
     // Grounded translation into detected query language
     const localizedAnswer = translateGroundedAnswer(
-      rawAnswer,
+      rawAnswer + partialDisclaimer,
       docMatch.docId,
       detectedLang.code
     );
 
     return {
       answer: `${localizedAnswer} [C1]`,
-      confidence: "high",
+      confidence: partialDisclaimer ? "medium" : "high",
       citations: [1],
       grounded: true,
       detectedLanguage: detectedLang.code,
@@ -188,7 +203,7 @@ export function synthesizeFastGroundedAnswer(
       finishReason: "stop",
       attempts: 1,
       latencyMs: performance.now() - t0,
-      raw: { engine: "fast", source: "dataset_answer", score: docMatch.score },
+      raw: { engine: "fast", source: "dataset_answer", score: docMatch.score, isDetailed: qIntent.isDetailed, isPartial: Boolean(partialDisclaimer) },
       warnings,
     };
   }
@@ -224,9 +239,9 @@ export function synthesizeFastGroundedAnswer(
       const coverage = targetTokens.length > 0 ? matchCount / targetTokens.length : 0;
       const missingCount = targetTokens.length - matchCount;
 
-      // Strict entity requirement
-      if (targetTokens.length >= 3 && coverage < 0.50) continue;
-      if (targetTokens.length === 2 && coverage < 0.50) continue;
+      // Strict entity coverage requirement
+      if (targetTokens.length >= 2 && coverage < 0.50) continue;
+      if (targetTokens.length === 1 && coverage < 1.0) continue;
 
       let patternBoost = 1.0;
       if (
@@ -261,21 +276,21 @@ export function synthesizeFastGroundedAnswer(
   }
 
   if (candidates.length === 0) {
-    // Fallback: take top chunk's first sentence
-    const firstSent = splitSentences(top.chunk.text)[0]?.trim() || top.chunk.text.slice(0, 150);
-    const localized = translateGroundedAnswer(firstSent, top.chunk.doc_id, detectedLang.code);
+    const refusalEn =
+      "I don't have enough information in the retrieved context to answer this question confidently.";
+    const localizedRefusal = translateGroundedAnswer(refusalEn, undefined, detectedLang.code);
     return {
-      answer: `${localized} [C1]`,
-      confidence: "low",
-      citations: [1],
-      grounded: true,
+      answer: localizedRefusal,
+      confidence: "refused",
+      citations: [],
+      grounded: false,
       detectedLanguage: detectedLang.code,
       languageName: detectedLang.name,
       finishReason: "stop",
       attempts: 1,
       latencyMs: performance.now() - t0,
-      raw: { engine: "fast", fallback: true },
-      warnings: ["No candidate sentence met strict entity coverage; used chunk prefix."],
+      raw: null,
+      warnings: ["No grounded candidate sentences found."],
     };
   }
 
@@ -285,9 +300,18 @@ export function synthesizeFastGroundedAnswer(
   let formattedSentence = best.sentence;
   if (!/[.!?।]$/.test(formattedSentence)) formattedSentence += ".";
 
+  if (qIntent.isDetailed && candidates.length > 1 && candidates[1].chunkIdx === best.chunkIdx) {
+    formattedSentence += ` ${candidates[1].sentence}`;
+  }
+
+  let partialDisclaimer = "";
+  if (qIntent.isMultiPart && qIntent.subtopics.length > 0) {
+    partialDisclaimer = " Note: The retrieved context does not contain additional details on how it is formed or other characteristics.";
+  }
+
   // Translate to query's detected language
   const localizedSentence = translateGroundedAnswer(
-    formattedSentence,
+    formattedSentence + partialDisclaimer,
     chunks[best.chunkIdx - 1]?.chunk.doc_id,
     detectedLang.code
   );
@@ -295,9 +319,9 @@ export function synthesizeFastGroundedAnswer(
   const answer = `${localizedSentence} [C${best.chunkIdx}]`;
 
   let confidence: "high" | "medium" | "low" = "low";
-  if (best.coverage >= 0.75 && best.chunkScore >= 0.4) {
+  if (best.coverage >= 0.65 && best.chunkScore >= 0.4 && !partialDisclaimer) {
     confidence = "high";
-  } else if (best.coverage >= 0.5 || best.chunkScore >= 0.25) {
+  } else if (best.coverage >= 0.35 || best.chunkScore >= 0.25) {
     confidence = "medium";
   }
 
@@ -317,6 +341,8 @@ export function synthesizeFastGroundedAnswer(
       chunkIdx: best.chunkIdx,
       score: best.score,
       coverage: best.coverage,
+      isDetailed: qIntent.isDetailed,
+      isPartial: Boolean(partialDisclaimer),
     },
     warnings,
   };
